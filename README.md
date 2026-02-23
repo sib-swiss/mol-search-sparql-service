@@ -21,7 +21,7 @@ mol-search-sparql-service -f compounds.tsv -p 8000
 Alternatively, you can dynamically fetch the compounds data on startup using a SPARQL query against a remote endpoint:
 
 ```bash
-mol-search-sparql-service -s fetch_rhea.rq -e http://localhost:7200/sparql -p 8000
+mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql -p 8000
 ```
 
 Other available optionally flags include `-d` (`--daemon`) to run the server in the background and write stdout/stderr to `server.log`. Port defaults to `8010` if `-p` is omitted.
