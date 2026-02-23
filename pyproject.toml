@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mol_search_sparql_service = "mol_search_sparql_service.main:main"
+mol-search-sparql-service = "mol_search_sparql_service.main:main"
 
 [build-system]
 requires = ["hatchling"]
