@@ -4,10 +4,10 @@ A service for finding similar chemicals and substructures using molecular finger
 
 ## Installation
 
-You can install this tool directly using `uv`:
+You can install this tool directly from GitHub using `uv`:
 
 ```bash
-uv tool install . --force
+uv tool install git+https://github.com/sib-swiss/mol-search-sparql-service.git
 ```
 
 ## Usage
