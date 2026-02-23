@@ -26,12 +26,6 @@ mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql 
 
 Other available optional flags include `-w` (`--workers`) to deploy multiple Uvicorn worker processes (default 1) and `-d` (`--daemon`) to run the server in the background and write stdout/stderr to `server.log`. Port defaults to `8010` if `-p` is omitted.
 
-With 3 columns:
-
-```tsv
-?chem	?smiles	?db
-```
-
 ## Features
 
 -   **SPARQL Endpoint**: Query for similarity and substructure matches using standard SPARQL syntax.
