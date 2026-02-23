@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDEs and OS
+.DS_Store
+.vscode/
+.idea/
+
+# Custom execution files
+debug_mcp.py
+old_stuff/

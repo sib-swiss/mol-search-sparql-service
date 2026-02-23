@@ -1,0 +1,31 @@
+[project]
+name = "mol_search_sparql_service"
+version = "0.1.1"
+description = "A chemistry search service with SPARQL and MCP interfaces."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.26.0",
+    "rdflib-endpoint>=0.6.0",
+    "rdkit>=2025.9.4",
+    "requests>=2.32.5",
+    "uvicorn>=0.41.0",
+]
+
+[project.scripts]
+mol_search_sparql_service = "mol_search_sparql_service.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
