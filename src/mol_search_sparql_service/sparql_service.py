@@ -200,5 +200,29 @@ app = SparqlEndpoint(
     # Functions are already registered via decorators on 'g'
 )
 
+# Startup event to load data in worker processes
+import os
+import atexit
+
+@app.on_event("startup")
+async def startup_event():
+    compounds_file = os.environ.get('COMPOUNDS_FILE')
+    # If the engine has no datasets (wasn't loaded by main.py due to workers>1), load it now
+    if compounds_file and not engine.datasets:
+        print(f"Worker initializing engine from: {compounds_file}")
+        engine.load_and_compile(compounds_file)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Attempt to cleanup temp files if this is the "main" process 
+    # (or just let the OS handle temp files).
+    delete_file = os.environ.get('DELETE_COMPOUNDS_FILE')
+    compounds_file = os.environ.get('COMPOUNDS_FILE')
+    if delete_file == '1' and compounds_file and os.path.exists(compounds_file):
+        try:
+            os.remove(compounds_file)
+        except:
+            pass
+
 # Mount MCP Server (FastMCP's internal app)
 app.mount("/mcp", mcp.sse_app())

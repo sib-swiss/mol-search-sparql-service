@@ -24,7 +24,7 @@ Alternatively, you can dynamically fetch the compounds data on startup using a S
 mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql -p 8000
 ```
 
-Other available optionally flags include `-d` (`--daemon`) to run the server in the background and write stdout/stderr to `server.log`. Port defaults to `8010` if `-p` is omitted.
+Other available optional flags include `-w` (`--workers`) to deploy multiple Uvicorn worker processes (default 1) and `-d` (`--daemon`) to run the server in the background and write stdout/stderr to `server.log`. Port defaults to `8010` if `-p` is omitted.
 
 With 3 columns:
 
