@@ -1,10 +1,10 @@
 import pytest
-from mol_search_sparql_service.rdkit_fingerprints import SearchEngine
+from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
 
 @pytest.fixture(scope="module")
 def engine():
-    eng = SearchEngine()
-    eng.load_and_compile("compounds.tsv")
+    eng = MolSearchEngine()
+    eng.load_file("compounds.tsv")
     return eng
 
 def test_engine_similarity_search(engine):
@@ -13,7 +13,7 @@ def test_engine_similarity_search(engine):
     # 1. Test defaults
     results = engine.search_similarity(test_mol)
     assert len(results) > 0
-    assert "similarity" in results[0]
+    assert results[0].similarity >= 0.0
 
     # 2. Test limit
     results = engine.search_similarity(test_mol, limit=3)
@@ -33,7 +33,7 @@ def test_engine_substructure_search(engine):
     # 1. Test defaults
     results = engine.search_substructure(smart)
     assert len(results) > 0
-    assert "match_count" in results[0]
+    assert results[0].match_count >= 1
 
     # 2. Test limit
     results = engine.search_substructure(smart, limit=2)

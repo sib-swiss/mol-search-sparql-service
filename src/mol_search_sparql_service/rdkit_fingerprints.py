@@ -1,4 +1,6 @@
 import csv
+from typing import Any, Callable
+from dataclasses import dataclass, replace
 from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.Chem import (
@@ -10,230 +12,283 @@ from rdkit.Chem import (
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 
 
-FINGERPRINTS = {
-    "morgan_ecfp": {
-        "short_name": "ECFP",
-        "python_method": rdFingerprintGenerator.GetMorganGenerator,
-        "default_options": {
+# ---------------------------------------------------------------------------
+# Dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass
+class FingerprintExplainability:
+    level: str
+    mechanism: str
+    limitations: str
+    typical_explanations: list[str]
+
+
+@dataclass
+class FingerprintConfig:
+    """Configuration for a single fingerprint type."""
+
+    short_name: str
+    python_method: Any  # Callable — RDKit generator / fingerprint function
+    default_options: dict[str, Any]
+    stereo_options: dict[str, Any]
+    description: str
+    explainability: FingerprintExplainability
+
+
+@dataclass
+class CompoundEntry:
+    """A single compound with its precomputed fingerprint."""
+
+    id: str
+    smiles: str
+    db_name: str = "unknown"
+    fp: Any = None  # RDKit fingerprint object (ExplicitBitVect / IntSparseIntVect)
+
+
+@dataclass
+class Dataset:
+    """All precomputed data for one fingerprint type."""
+
+    data: list[CompoundEntry]
+    fps: list[Any]                          # parallel list of raw RDKit FP objects
+    db_indices: dict[str, list[int]]        # db_name → list of indices into data/fps
+
+
+@dataclass
+class SimilarityResult:
+    """One hit from a similarity search."""
+
+    compound: CompoundEntry
+    similarity: float
+
+
+@dataclass
+class SubstructureResult:
+    """One hit from a substructure search (compound data + match count)."""
+
+    id: str
+    smiles: str
+    db_name: str
+    fp: Any = None
+    match_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Fingerprint registry
+# ---------------------------------------------------------------------------
+
+FINGERPRINTS: dict[str, FingerprintConfig] = {
+    "morgan_ecfp": FingerprintConfig(
+        short_name="ECFP",
+        python_method=rdFingerprintGenerator.GetMorganGenerator,
+        default_options={
             "radius": 2,
             "fpSize": 2048,
             "includeChirality": False,
             "useBondTypes": True,
-            "countSimulation": False
+            "countSimulation": False,
         },
-        "stereo_options": {
-            "includeChirality": True
-        },
-        "description": (
+        stereo_options={"includeChirality": True},
+        description=(
             "Extended Connectivity Fingerprint (ECFP). "
             "Encodes atom-centered circular environments up to a given radius. "
             "Widely used for similarity search, clustering, and QSAR."
         ),
-        "explainability": {
-            "level": "high",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="high",
+            mechanism=(
                 "Each bit corresponds to one or more atom-centered environments "
                 "(atom index + radius). Bit-to-substructure mapping is available "
                 "via additionalOutput / bitInfo."
             ),
-            "limitations": (
+            limitations=(
                 "Bits are hashed; collisions are possible. "
                 "One bit may correspond to multiple distinct substructures."
             ),
-            "typical_explanations": [
+            typical_explanations=[
                 "Highlighted atom environments",
                 "Similarity maps",
-                "Per-atom importance aggregation"
-            ]
-        }
-    },
+                "Per-atom importance aggregation",
+            ],
+        ),
+    ),
 
-    "morgan_fcfp": {
-        "short_name": "FCFP",
-        "python_method": rdFingerprintGenerator.GetMorganGenerator,
-        "default_options": {
+    "morgan_fcfp": FingerprintConfig(
+        short_name="FCFP",
+        python_method=rdFingerprintGenerator.GetMorganGenerator,
+        default_options={
             "radius": 2,
             "fpSize": 2048,
             "includeChirality": False,
             "useBondTypes": True,
-            "countSimulation": False
+            "countSimulation": False,
         },
-        "stereo_options": {
-            "includeChirality": True
-        },
-        "description": (
+        stereo_options={"includeChirality": True},
+        description=(
             "Functional-Class Fingerprint (FCFP). "
             "Morgan fingerprint using pharmacophoric atom features instead of "
             "exact atom types."
         ),
-        "explainability": {
-            "level": "high",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="high",
+            mechanism=(
                 "Same as ECFP, but environments are defined over functional "
                 "roles (HBD, HBA, aromatic, charged, etc.)."
             ),
-            "limitations": (
-                "Chemical specificity is reduced compared to ECFP."
-            ),
-            "typical_explanations": [
+            limitations="Chemical specificity is reduced compared to ECFP.",
+            typical_explanations=[
                 "Functional similarity",
-                "Scaffold hopping rationales"
-            ]
-        }
-    },
+                "Scaffold hopping rationales",
+            ],
+        ),
+    ),
 
-    "rdk_topological": {
-        "short_name": "RDK",
-        "python_method": RDKFingerprint,
-        "default_options": {
+    "rdk_topological": FingerprintConfig(
+        short_name="RDK",
+        python_method=RDKFingerprint,
+        default_options={
             "minPath": 1,
             "maxPath": 7,
             "fpSize": 2048,
             "useHs": True,
-            "branchedPaths": True
+            "branchedPaths": True,
         },
-        "stereo_options": {},
-        "description": (
+        stereo_options={},
+        description=(
             "RDKit topological (path-based) fingerprint. "
             "Encodes linear bond paths similar to Daylight fingerprints."
         ),
-        "explainability": {
-            "level": "high",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="high",
+            mechanism=(
                 "Each bit corresponds to one or more explicit bond paths. "
                 "Exact atom and bond indices can be recovered via bitInfo."
             ),
-            "limitations": (
+            limitations=(
                 "Sensitive to small structural changes; "
                 "less robust for scaffold hopping."
             ),
-            "typical_explanations": [
+            typical_explanations=[
                 "Exact substructure paths",
-                "Bond-path highlighting"
-            ]
-        }
-    },
+                "Bond-path highlighting",
+            ],
+        ),
+    ),
 
-    "atom_pair": {
-        "short_name": "AP",
-        "python_method": Pairs.GetAtomPairFingerprint,
-        "default_options": {},
-        "stereo_options": {},
-        "description": (
+    "atom_pair": FingerprintConfig(
+        short_name="AP",
+        python_method=Pairs.GetAtomPairFingerprint,  # type: ignore[attr-defined]
+        default_options={},
+        stereo_options={},
+        description=(
             "Atom Pair fingerprint. Encodes pairs of atoms along with their "
             "topological distance."
         ),
-        "explainability": {
-            "level": "medium",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="medium",
+            mechanism=(
                 "Each feature represents a pair of atoms at a given distance. "
                 "Explanations identify which atom pairs contributed."
             ),
-            "limitations": (
+            limitations=(
                 "No connected subgraph; explanations are relational rather than "
                 "structural."
             ),
-            "typical_explanations": [
+            typical_explanations=[
                 "Activity cliff analysis",
-                "Long-range interaction reasoning"
-            ]
-        }
-    },
-
-    "topological_torsion": {
-        "short_name": "TT",
-        "python_method": Torsions.GetTopologicalTorsionFingerprint,
-        "default_options": {},
-        "stereo_options": {},
-        "description": (
-            "Topological Torsion fingerprint. Encodes sequences of four bonded atoms."
+                "Long-range interaction reasoning",
+            ],
         ),
-        "explainability": {
-            "level": "medium",
-            "mechanism": (
+    ),
+
+    "topological_torsion": FingerprintConfig(
+        short_name="TT",
+        python_method=Torsions.GetTopologicalTorsionFingerprint,  # type: ignore[attr-defined]
+        default_options={},
+        stereo_options={},
+        description="Topological Torsion fingerprint. Encodes sequences of four bonded atoms.",
+        explainability=FingerprintExplainability(
+            level="medium",
+            mechanism=(
                 "Each feature corresponds to a specific 4-atom sequence "
                 "(A–B–C–D)."
             ),
-            "limitations": (
-                "Local view only; torsions are hashed in bit-vector form."
-            ),
-            "typical_explanations": [
+            limitations="Local view only; torsions are hashed in bit-vector form.",
+            typical_explanations=[
                 "Linker characterization",
-                "Conformation-sensitive similarity"
-            ]
-        }
-    },
+                "Conformation-sensitive similarity",
+            ],
+        ),
+    ),
 
-    "maccs": {
-        "short_name": "MACCS",
-        "python_method": MACCSkeys.GenMACCSKeys,
-        "default_options": {},
-        "stereo_options": {},
-        "description": (
+    "maccs": FingerprintConfig(
+        short_name="MACCS",
+        python_method=MACCSkeys.GenMACCSKeys,  # type: ignore[attr-defined]
+        default_options={},
+        stereo_options={},
+        description=(
             "MACCS structural keys (166 bits). "
             "Each bit corresponds to a predefined chemical pattern."
         ),
-        "explainability": {
-            "level": "very high",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="very high",
+            mechanism=(
                 "Each bit has a fixed semantic meaning defined in the MACCS "
                 "specification."
             ),
-            "limitations": (
-                "Low resolution; many subtle SAR effects are not captured."
-            ),
-            "typical_explanations": [
+            limitations="Low resolution; many subtle SAR effects are not captured.",
+            typical_explanations=[
                 "Human-readable feature presence",
-                "Medicinal chemistry reports"
-            ]
-        }
-    },
+                "Medicinal chemistry reports",
+            ],
+        ),
+    ),
 
-    "pattern": {
-        "short_name": "Pattern",
-        "python_method": PatternFingerprint,
-        "default_options": {
-            "fpSize": 2048
-        },
-        "stereo_options": {},
-        "description": (
+    "pattern": FingerprintConfig(
+        short_name="Pattern",
+        python_method=PatternFingerprint,
+        default_options={"fpSize": 2048},
+        stereo_options={},
+        description=(
             "RDKit Pattern fingerprint. "
             "Designed for substructure screening."
         ),
-        "explainability": {
-            "level": "low",
-            "mechanism": (
+        explainability=FingerprintExplainability(
+            level="low",
+            mechanism=(
                 "Bits correspond to various small substructures/paths. "
                 "Mainly used for pre-filtering substructure matches."
             ),
-            "limitations": (
-                "High collision rate; screening only."
-            ),
-            "typical_explanations": [
-                "Substructure screening"
-            ]
-        }
-    }
+            limitations="High collision rate; screening only.",
+            typical_explanations=["Substructure screening"],
+        ),
+    ),
 }
 
 
-def get_fingerprint(mol, name="morgan_ecfp", stereo=False):
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+def get_fingerprint(mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = False) -> Any:
     """
     Generates a fingerprint for a molecule using the specified configuration name.
+    Returns an RDKit fingerprint object (ExplicitBitVect or IntSparseIntVect).
     """
     if name not in FINGERPRINTS:
         raise ValueError(f"Unknown fingerprint type: {name}")
 
     cfg = FINGERPRINTS[name]
-    opts = cfg["default_options"].copy()
+    opts = cfg.default_options.copy()
     if stereo:
-        opts.update(cfg["stereo_options"])
+        opts.update(cfg.stereo_options)
 
     # Handle FCFP (feature invariants)
     if name == "morgan_fcfp":
         opts["atomInvariantsGenerator"] = rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
 
-    func = cfg["python_method"]
+    func: Callable[..., Any] = cfg.python_method
 
     if name in ["morgan_ecfp", "morgan_fcfp"]:
         generator = func(**opts)
@@ -242,7 +297,8 @@ def get_fingerprint(mol, name="morgan_ecfp", stereo=False):
         # For others (including pattern), options are passed directly to the function along with mol
         return func(mol, **opts)
 
-def safe_mol_from_smiles(smiles, cid="unknown"):
+
+def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
     """
     Safely parses a SMILES string into an RDKit Mol object, avoiding strict
     sanitization bugs on organo-metalic compounds by carefully applying SanitizeFlags.
@@ -269,58 +325,64 @@ def safe_mol_from_smiles(smiles, cid="unknown"):
         return None
 
 
-class SearchEngine:
-    def __init__(self):
-        # Dictionary to hold different datasets
-        # keys: 'morgan_ecfp', 'pattern', ...
-        # values: { 'data': [...], 'fps': [...], 'db_indices': { 'tier1': [indices], ... } }
-        self.datasets = {}
+# ---------------------------------------------------------------------------
+# Search engine
+# ---------------------------------------------------------------------------
 
-    def add_data(self, data, fp_type):
+class MolSearchEngine:
+    def __init__(self) -> None:
+        # keys: fingerprint type name (e.g. 'morgan_ecfp', 'pattern')
+        # values: compiled Dataset for that fingerprint type
+        self.datasets: dict[str, Dataset] = {}
+
+    def add_data(self, data: list[CompoundEntry], fp_type: str) -> None:
         """
-        Populate the engine with a list of compound dictionaries.
-        Each dictionary must have 'fp' (fingerprint object) and optionally 'db_name'.
+        Populate the engine with a list of CompoundEntry objects.
+        Each entry must have a precomputed 'fp' and optionally a 'db_name'.
         """
         # Optimization: Pre-calculate indices for each db_name
-        db_indices = {}
-        fps = []
+        db_indices: dict[str, list[int]] = {}
+        fps: list[Any] = []
 
         for idx, entry in enumerate(data):
             # Extract FP for bulk operations
-            fps.append(entry['fp'])
+            fps.append(entry.fp)
 
             # Index by db_name
-            db_name = entry.get('db_name', 'unknown')
-            if db_name not in db_indices:
-                db_indices[db_name] = []
-            db_indices[db_name].append(idx)
+            if entry.db_name not in db_indices:
+                db_indices[entry.db_name] = []
+            db_indices[entry.db_name].append(idx)
 
-        self.datasets[fp_type] = {
-            'data': data,
-            'fps': fps,
-            'db_indices': db_indices
-        }
+        self.datasets[fp_type] = Dataset(data=data, fps=fps, db_indices=db_indices)
 
-    def _get_indices(self, fp_type, db_names=None):
+    def _get_indices(self, fp_type: str, db_names: list[str] | None = None) -> range | list[int]:
         """
         Helper to get valid indices based on db_names filter.
-        Returns a list of integer indices or None (if all).
+        Returns a range (all) or a filtered list of integer indices.
         """
         dataset = self.datasets.get(fp_type)
         if not dataset:
             raise ValueError(f"Dataset {fp_type} not loaded.")
 
         if not db_names:
-            # Return list of all indices
-            return range(len(dataset['data']))
+            # Return range covering all indices
+            return range(len(dataset.data))
 
-        indices = []
+        indices: list[int] = []
         for db in db_names:
-            if db in dataset['db_indices']:
-                indices.extend(dataset['db_indices'][db])
+            if db in dataset.db_indices:
+                indices.extend(dataset.db_indices[db])
         return indices
 
-    def search_similarity(self, query_smiles, limit=5, db_names=None, fp_type='morgan_ecfp', use_chirality=False, min_score=0.0):
+    def search_similarity(
+        self,
+        query_smiles: str,
+        limit: int = 5,
+        db_names: list[str] | None = None,
+        fp_type: str = "morgan_ecfp",
+        use_chirality: bool = False,
+        min_score: float = 0.0,
+    ) -> list[SimilarityResult]:
         """
         Executes a similarity search.
         """
@@ -341,30 +403,35 @@ class SearchEngine:
 
         # Retrieve FPs for the target indices
         if not db_names:
-            target_fps = dataset['fps']
-            target_data = dataset['data']
+            target_fps: list[Any] = dataset.fps
+            target_data: list[CompoundEntry] = dataset.data
         else:
             # Construct subset list
-            target_fps = [dataset['fps'][i] for i in indices]
-            target_data = [dataset['data'][i] for i in indices]
+            target_fps = [dataset.fps[i] for i in indices]
+            target_data = [dataset.data[i] for i in indices]
 
         if not target_fps:
             return []
 
-        sims = DataStructs.BulkTanimotoSimilarity(query_fp, target_fps)
+        sims: list[float] = DataStructs.BulkTanimotoSimilarity(query_fp, target_fps)
 
-        results = []
+        results: list[SimilarityResult] = []
         for i, sim in enumerate(sims):
             if sim >= min_score:
-                results.append({
-                    'compound': target_data[i],
-                    'similarity': sim
-                })
+                results.append(SimilarityResult(compound=target_data[i], similarity=sim))
 
-        results.sort(key=lambda x: x['similarity'], reverse=True)
+        results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:limit]
 
-    def search_substructure(self, query_smiles, limit=5,  use_chirality=False, db_names=None, fp_type='pattern', min_match_count=1):
+    def search_substructure(
+        self,
+        query_smiles: str,
+        limit: int = 5,
+        use_chirality: bool = False,
+        db_names: list[str] | None = None,
+        fp_type: str = "pattern",
+        min_match_count: int = 1,
+    ) -> list[SubstructureResult]:
         """
         Executes a substructure search (Screening + Verification).
         """
@@ -383,60 +450,62 @@ class SearchEngine:
         # Get candidate indices
         indices = self._get_indices(fp_type, db_names)
 
-        candidates_data = []
+        candidates_data: list[CompoundEntry] = []
 
         # Screening
         # Optimization: We avoid creating intermediate lists of ALL compounds
-        data = dataset['data']
-        fps = dataset['fps']
+        data = dataset.data
+        fps = dataset.fps
 
         for i in indices:
             if DataStructs.AllProbeBitsMatch(query_fp, fps[i]):
                 candidates_data.append(data[i])
 
         # Verification
-        results = []
+        results: list[SubstructureResult] = []
         for entry in candidates_data:
             try:
                 # Optimized verification: Parsing SMILES is the slow part.
-                target_mol = safe_mol_from_smiles(entry['smiles'], cid=entry.get('id', 'unknown'))
+                target_mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
+                if target_mol is None:
+                    continue
                 matches = target_mol.GetSubstructMatches(query_mol, useChirality=use_chirality)
 
                 if matches and len(matches) >= min_match_count:
-                    result = entry.copy()
-                    result['match_count'] = len(matches)
-                    results.append(result)
+                    results.append(SubstructureResult(
+                        id=entry.id,
+                        smiles=entry.smiles,
+                        db_name=entry.db_name,
+                        fp=entry.fp,
+                        match_count=len(matches),
+                    ))
 
                     if limit and len(results) >= limit:
                         break
-            except:
+            except Exception:
                 continue
         return results
 
-    def load_and_compile(self, compounds_file):
+    def load_file(self, compounds_file: str) -> None:
         print(f"Reading compounds from {compounds_file}...")
-        compounds = []
-        with open(compounds_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f, delimiter='\t')
+        compounds: list[CompoundEntry] = []
+        with open(compounds_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter="\t")
             for row in reader:
                 # New format: ?db, ?chem, ?smiles
                 try:
                     # Extract ID from ?chem (<URI>)
-                    cid = row.get('?chem', '').strip('<>')
+                    cid = row.get("?chem", "").strip("<>")
                     if not cid:
                         continue
 
                     # Extract SMILES from ?smiles ("SMILES")
-                    smiles = row.get('?smiles', '').strip('"')
+                    smiles = row.get("?smiles", "").strip('"')
 
                     # Extract DB from ?db (<URI>)
-                    db = row.get('?db', '').strip('<>') if '?db' in row else 'unknown'
+                    db = row.get("?db", "").strip("<>") if "?db" in row else "unknown"
 
-                    compounds.append({
-                        'id': cid,
-                        'smiles': smiles,
-                        'db_name': db
-                    })
+                    compounds.append(CompoundEntry(id=cid, smiles=smiles, db_name=db))
                 except Exception:
                     continue
 
@@ -454,16 +523,16 @@ class SearchEngine:
         print("Compilation complete.")
 
 
-def compile_fingerprints_in_memory(compounds, fp_type):
-    data = []
+def compile_fingerprints_in_memory(
+    compounds: list[CompoundEntry], fp_type: str
+) -> list[CompoundEntry]:
+    data: list[CompoundEntry] = []
     for entry in compounds:
-        mol = safe_mol_from_smiles(entry['smiles'], cid=entry.get('id', 'unknown'))
+        mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
         if mol:
-            fp = get_fingerprint(mol, fp_type)
-            # Create entry with fp
-            item = entry.copy()
-            item['fp'] = fp
-            data.append(item)
+                fp = get_fingerprint(mol, fp_type)
+                # Create a new entry with the fingerprint attached
+                data.append(replace(entry, fp=fp))
     return data
 
 
@@ -471,4 +540,4 @@ def compile_fingerprints_in_memory(compounds, fp_type):
 
 
 # Initialize Engine globally for easy sharing
-engine = SearchEngine()
+engine = MolSearchEngine()

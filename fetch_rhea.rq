@@ -1,7 +1,8 @@
+#+ endpoint: https://sparql.rhea-db.org/sparql
 PREFIX chebi: <http://purl.obolibrary.org/obo/chebi/>
 
 SELECT DISTINCT ?chem ?smiles ?db
 WHERE {
-  ?chem <http://purl.obolibrary.org/obo/chebi/smiles> ?smiles .
+  ?chem chebi:smiles ?smiles .
   BIND("Rhea" AS ?db)
 }

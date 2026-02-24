@@ -25,7 +25,7 @@ def main():
 
     # 1. Compile Data
     if args.file:
-        engine.load_and_compile(args.file)
+        engine.load_file(args.file)
     else:
         with open(args.sparql, 'r') as f:
             query = f.read()
@@ -46,7 +46,7 @@ def main():
             os.environ['COMPOUNDS_FILE'] = temp_path
             os.environ['DELETE_COMPOUNDS_FILE'] = '1'
 
-            engine.load_and_compile(temp_path)
+            engine.load_file(temp_path)
             # We will rely on sparql_service or OS to clean this up, or clean it up after uvicorn exits.
         except Exception as e:
             print(f"Failed to fetch data from endpoint: {e}")

@@ -52,9 +52,9 @@ Lists available fingerprint types.
     return [
         FingerprintInfo(
             fpType=key,
-            description=val.get('description', ''),
-            mechanism=val.get('explainability', {}).get('mechanism', ''),
-            shortName=val.get('short_name', '')
+            description=val.description,
+            mechanism=val.explainability.mechanism,
+            shortName=val.short_name
         )
         for key, val in FINGERPRINTS.items()
     ]
@@ -80,7 +80,7 @@ Performs similarity search based on fingerprints.
 
         db_list = [db_names] if db_names else None
         results = engine.search_similarity(smiles, limit=limit, db_names=db_list, fp_type=fp_type, use_chirality=use_chirality, min_score=min_score)
-        return [SearchResult(result=URIRef(r['compound']['id']), score=float(r['similarity'])) for r in results]
+        return [SearchResult(result=URIRef(r.compound.id), score=float(r.similarity)) for r in results]
     except Exception as e:
         print(f"Error in similarity_search: {e}")
         return []
@@ -101,7 +101,7 @@ Performs substructure search.
     try:
         db_list = [db_names] if db_names else None
         results = engine.search_substructure(smart, limit=limit, db_names=db_list, use_chirality=use_chirality, min_match_count=min_match_count)
-        return [SubstructureSearchResult(result=URIRef(r['id']), matchCount=int(r.get('match_count', 1))) for r in results]
+        return [SubstructureSearchResult(result=URIRef(r.id), matchCount=int(r.match_count)) for r in results]
     except Exception as e:
         print(f"Error in substructure_search: {e}")
         return []
@@ -121,7 +121,7 @@ mcp = FastMCP("Chemistry Search")
 def _update_docstrings():
     fp_descriptions = []
     for key, val in FINGERPRINTS.items():
-        desc = f"- {key}: {val['description']}"
+        desc = f"- {key}: {val.description}"
         fp_descriptions.append(desc)
 
     fp_doc = "\n    ".join(fp_descriptions)
@@ -209,7 +209,7 @@ async def startup_event():
     # If the engine has no datasets (wasn't loaded by main.py due to workers>1), load it now
     if compounds_file and not engine.datasets:
         print(f"Worker initializing engine from: {compounds_file}")
-        engine.load_and_compile(compounds_file)
+        engine.load_file(compounds_file)
 
 @app.on_event("shutdown")
 async def shutdown_event():
