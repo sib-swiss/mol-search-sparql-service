@@ -1,6 +1,4 @@
 import csv
-import pickle
-import time
 from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.Chem import (
@@ -225,18 +223,18 @@ def get_fingerprint(mol, name="morgan_ecfp", stereo=False):
     """
     if name not in FINGERPRINTS:
         raise ValueError(f"Unknown fingerprint type: {name}")
-        
+
     cfg = FINGERPRINTS[name]
     opts = cfg["default_options"].copy()
     if stereo:
         opts.update(cfg["stereo_options"])
-        
+
     # Handle FCFP (feature invariants)
     if name == "morgan_fcfp":
         opts["atomInvariantsGenerator"] = rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
-        
+
     func = cfg["python_method"]
-    
+
     if name in ["morgan_ecfp", "morgan_fcfp"]:
         generator = func(**opts)
         return generator.GetFingerprint(mol)
@@ -252,12 +250,12 @@ def safe_mol_from_smiles(smiles, cid="unknown"):
     mol = Chem.MolFromSmiles(smiles, sanitize=False)
     if mol is None:
         return None
-        
+
     problems = Chem.DetectChemistryProblems(mol)
     if problems:
         for p in problems:
             print(f"{cid}\terror\t{p.GetType()}: {p.Message()}")
-            
+
     try:
         Chem.SanitizeMol(
             mol,
@@ -286,33 +284,22 @@ class SearchEngine:
         # Optimization: Pre-calculate indices for each db_name
         db_indices = {}
         fps = []
-        
+
         for idx, entry in enumerate(data):
             # Extract FP for bulk operations
             fps.append(entry['fp'])
-            
+
             # Index by db_name
             db_name = entry.get('db_name', 'unknown')
             if db_name not in db_indices:
                 db_indices[db_name] = []
             db_indices[db_name].append(idx)
-            
+
         self.datasets[fp_type] = {
             'data': data,
             'fps': fps,
             'db_indices': db_indices
         }
-
-    def load_data(self, filename, fp_type):
-        print(f"Loading {fp_type} fingerprints from {filename}...")
-        start_time = time.time()
-        
-        with open(filename, 'rb') as f:
-            raw_data = pickle.load(f)
-            
-        self.add_data(raw_data, fp_type)
-        
-        print(f"Loaded {len(raw_data)} {fp_type} records in {time.time() - start_time:.4f}s.")
 
     def _get_indices(self, fp_type, db_names=None):
         """
@@ -322,11 +309,11 @@ class SearchEngine:
         dataset = self.datasets.get(fp_type)
         if not dataset:
             raise ValueError(f"Dataset {fp_type} not loaded.")
-            
+
         if not db_names:
             # Return list of all indices
             return range(len(dataset['data']))
-            
+
         indices = []
         for db in db_names:
             if db in dataset['db_indices']:
@@ -339,19 +326,19 @@ class SearchEngine:
         """
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
-            
+
         dataset = self.datasets[fp_type]
-        
+
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
-            
+
         query_fp = get_fingerprint(query_mol, fp_type, stereo=use_chirality)
-        
+
         # Get indices to search
         indices = self._get_indices(fp_type, db_names)
-        
+
         # Retrieve FPs for the target indices
         if not db_names:
             target_fps = dataset['fps']
@@ -365,7 +352,7 @@ class SearchEngine:
             return []
 
         sims = DataStructs.BulkTanimotoSimilarity(query_fp, target_fps)
-        
+
         results = []
         for i, sim in enumerate(sims):
             if sim >= min_score:
@@ -373,7 +360,7 @@ class SearchEngine:
                     'compound': target_data[i],
                     'similarity': sim
                 })
-            
+
         results.sort(key=lambda x: x['similarity'], reverse=True)
         return results[:limit]
 
@@ -383,30 +370,30 @@ class SearchEngine:
         """
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
-            
+
         dataset = self.datasets[fp_type]
-        
+
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
-            
+
         query_fp = get_fingerprint(query_mol, fp_type)
-        
+
         # Get candidate indices
         indices = self._get_indices(fp_type, db_names)
-        
+
         candidates_data = []
-        
+
         # Screening
         # Optimization: We avoid creating intermediate lists of ALL compounds
         data = dataset['data']
         fps = dataset['fps']
-        
+
         for i in indices:
             if DataStructs.AllProbeBitsMatch(query_fp, fps[i]):
                 candidates_data.append(data[i])
-                
+
         # Verification
         results = []
         for entry in candidates_data:
@@ -414,12 +401,12 @@ class SearchEngine:
                 # Optimized verification: Parsing SMILES is the slow part.
                 target_mol = safe_mol_from_smiles(entry['smiles'], cid=entry.get('id', 'unknown'))
                 matches = target_mol.GetSubstructMatches(query_mol, useChirality=use_chirality)
-                
+
                 if matches and len(matches) >= min_match_count:
                     result = entry.copy()
                     result['match_count'] = len(matches)
                     results.append(result)
-                    
+
                     if limit and len(results) >= limit:
                         break
             except:
@@ -438,13 +425,13 @@ class SearchEngine:
                     cid = row.get('?chem', '').strip('<>')
                     if not cid:
                         continue
-                        
+
                     # Extract SMILES from ?smiles ("SMILES")
                     smiles = row.get('?smiles', '').strip('"')
-                    
+
                     # Extract DB from ?db (<URI>)
                     db = row.get('?db', '').strip('<>') if '?db' in row else 'unknown'
-                    
+
                     compounds.append({
                         'id': cid,
                         'smiles': smiles,
@@ -452,10 +439,10 @@ class SearchEngine:
                     })
                 except Exception:
                     continue
-        
+
         # Compile In-Memory
         print(f"Compiling fingerprints dynamically ({len(compounds)} compounds)...")
-        
+
         for fp_name in FINGERPRINTS.keys():
             print(f"  - Compiling {fp_name}...")
             try:
@@ -463,7 +450,7 @@ class SearchEngine:
                 self.add_data(data, fp_name)
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
-                
+
         print("Compilation complete.")
 
 

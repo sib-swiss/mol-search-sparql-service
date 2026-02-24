@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Any
-from rdflib import Literal, URIRef, Namespace
+from rdflib import URIRef, Namespace
 from rdflib_endpoint import SparqlEndpoint, DatasetExt
 from mcp.server.fastmcp import FastMCP
 
@@ -36,12 +35,12 @@ g.bind("func", FUNC)
 # SPARQL ENDPOINTS (rdflib_endpoint format)
 # =========================================================================
 # The following bindings exist specifically to satisfy the `SparqlEndpoint`
-# library interfaces, expecting strict typings and returning specific class 
+# library interfaces, expecting strict typings and returning specific class
 # dataclasses that are serialized over RDF logic.
 # =========================================================================
 
 @g.type_function(FUNC)
-def list_fingerprints() -> List[FingerprintInfo]:
+def list_fingerprints() -> list[FingerprintInfo]:
     """
 ### func:ListFingerprints
 Lists available fingerprint types.
@@ -61,7 +60,7 @@ Lists available fingerprint types.
     ]
 
 @g.type_function(FUNC)
-def similarity_search(smiles: str, limit: int = 10, db_names: str = None, fp_type: str = 'morgan_ecfp', use_chirality: bool = False, min_score: float = 0.0) -> List[SearchResult]:
+def similarity_search(smiles: str, limit: int = 10, db_names: str | None = None, fp_type: str = 'morgan_ecfp', use_chirality: bool = False, min_score: float = 0.0) -> list[SearchResult]:
     """
 ### func:SimilaritySearch
 Performs similarity search based on fingerprints.
@@ -78,7 +77,7 @@ Performs similarity search based on fingerprints.
         if fp_type not in FINGERPRINTS:
             print(f"Error: Invalid fingerprint type '{fp_type}'")
             return []
-            
+
         db_list = [db_names] if db_names else None
         results = engine.search_similarity(smiles, limit=limit, db_names=db_list, fp_type=fp_type, use_chirality=use_chirality, min_score=min_score)
         return [SearchResult(result=URIRef(r['compound']['id']), score=float(r['similarity'])) for r in results]
@@ -87,7 +86,7 @@ Performs similarity search based on fingerprints.
         return []
 
 @g.type_function(FUNC)
-def substructure_search(smart: str, limit: int = 100, db_names: str = None, use_chirality: bool = False, min_match_count: int = 1) -> List[SubstructureSearchResult]:
+def substructure_search(smart: str, limit: int = 100, db_names: str | None = None, use_chirality: bool = False, min_match_count: int = 1) -> list[SubstructureSearchResult]:
     """
 ### func:SubstructureSearch
 Performs substructure search.
@@ -124,9 +123,9 @@ def _update_docstrings():
     for key, val in FINGERPRINTS.items():
         desc = f"- {key}: {val['description']}"
         fp_descriptions.append(desc)
-    
+
     fp_doc = "\n    ".join(fp_descriptions)
-    
+
     if similarity_search.__doc__:
         similarity_search.__doc__ += f"\n    Available Fingerprint Types:\n    {fp_doc}\n    "
 
@@ -214,7 +213,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    # Attempt to cleanup temp files if this is the "main" process 
+    # Attempt to cleanup temp files if this is the "main" process
     # (or just let the OS handle temp files).
     delete_file = os.environ.get('DELETE_COMPOUNDS_FILE')
     compounds_file = os.environ.get('COMPOUNDS_FILE')

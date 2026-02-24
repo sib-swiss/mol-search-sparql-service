@@ -1,8 +1,9 @@
 [project]
 name = "mol_search_sparql_service"
 version = "0.1.1"
-description = "A chemistry search service with SPARQL and MCP interfaces."
+description = "A SPARQL service for finding similar chemicals and substructures using molecular fingerprints."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.13"
 dependencies = [
     "mcp>=1.26.0",
@@ -11,9 +12,28 @@ dependencies = [
     "requests>=2.32.5",
     "uvicorn>=0.41.0",
 ]
+authors = [
+    { name = "Marco Pagni", email = "marco.pagni@sib.swiss" },
+]
+maintainers = [
+    { name = "Marco Pagni", email = "marco.pagni@sib.swiss" },
+]
+keywords = [
+    "SPARQL",
+    "RDKit",
+    "chemistry",
+    "molecular search",
+]
 
 [project.scripts]
 mol-search-sparql-service = "mol_search_sparql_service.main:main"
+
+[project.urls]
+Homepage = "https://github.com/sib-swiss/mol-search-sparql-service"
+Documentation = "https://github.com/sib-swiss/mol-search-sparql-service"
+History = "https://github.com/sib-swiss/mol-search-sparql-service/releases"
+Tracker = "https://github.com/sib-swiss/mol-search-sparql-service/issues"
+Source = "https://github.com/sib-swiss/mol-search-sparql-service"
 
 [build-system]
 requires = ["hatchling"]
@@ -21,6 +41,10 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "--cov=src",
+    "--cov-report=term-missing",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
@@ -28,4 +52,5 @@ filterwarnings = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
 ]

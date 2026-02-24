@@ -1,6 +1,6 @@
 # Chemistry Search SPARQL Service
 
-A service for finding similar chemicals and substructures using molecular fingerprints. It provides both a SPARQL endpoint and an MCP (Model Context Protocol) server interface. Built using **RDKit**.
+A SPARQL service for finding similar chemicals and substructures using molecular fingerprints. Built using **RDKit**.
 
 ## Installation
 
@@ -53,3 +53,12 @@ The input TSV file should contain at least:
 -   `?chem`: URI of the chemical
 -   `?smiles`: SMILES string
 -   `?db`: (Optional) Database source URI
+
+## Development
+
+Run tests:
+
+```sh
+uv run pytest
+```
+
