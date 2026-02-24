@@ -186,13 +186,13 @@ def generate_docs() -> str:
     # g.generate_docs() returns markdown for every registered @g.type_function
     docs = g.generate_docs()
     # Append fingerprint options table
-    fp_lines = ["## Available Fingerprint Types\n"]
+    fp_lines = ["## 🫆 Available Fingerprint Types\n"]
     fp_lines.append("| Key | Short Name | Description |")
     fp_lines.append("|-----|------------|-------------|")
     for key, fp in FINGERPRINTS.items():
         desc = " ".join(fp.description.split())
         fp_lines.append(f"| `{key}` | {fp.short_name} | {desc} |")
-    return "\n## Functions\n\n" + docs.rstrip() + "\n\n" + "\n".join(fp_lines) + "\n"
+    return "\n## 📖 Functions\n\n" + docs.rstrip() + "\n\n" + "\n".join(fp_lines) + "\n"
 
 
 # =========================================================================

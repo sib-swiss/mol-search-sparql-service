@@ -1,6 +1,8 @@
-# Chemistry Search SPARQL Service
+# 🫆 Chemistry Search SPARQL Service
 
-A SPARQL service for finding similar chemicals and substructures using molecular fingerprints. 
+A SPARQL service for finding similar chemicals and substructures using molecular fingerprints.
+
+Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https://github.com/vemonet/rdflib-endpoint).
 
 ## 🧩 Features
 
@@ -19,8 +21,6 @@ A SPARQL service for finding similar chemicals and substructures using molecular
   ```
 
 - **MCP Server**: Exposes SPARQL functions documentation through resource and prompt to help LLMs to perform searches (experimental).
-
-Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https://github.com/vemonet/rdflib-endpoint).
 
 ## 📥 Installation
 
@@ -56,7 +56,7 @@ Other available optional flags include `-w` (`--workers`) to deploy multiple Uvi
 
 <!-- AUTOGEN_DOCS_START -->
 
-## Functions
+## 📖 Functions
 
 ### `func:ListFingerprints`
 
@@ -159,7 +159,7 @@ SELECT ?result ?matchCount WHERE {
 }
 ```
 
-## Available Fingerprint Types
+## 🫆 Available Fingerprint Types
 
 | Key | Short Name | Description |
 |-----|------------|-------------|
@@ -187,9 +187,15 @@ Format and lint:
 uvx ruff format && uvx ruff check --fix
 ```
 
-Auto-generate docs from functions and update the `README.md`:
+Auto-generate docs from functions docstrings and update the `README.md`:
 
 ```sh
 uv run src/mol_search_sparql_service/gen_docs.py
+```
+
+To release a new version run the release script providing the version bump: `fix`, `minor`, or `major`:
+
+```sh
+.github/release.sh fix
 ```
 
