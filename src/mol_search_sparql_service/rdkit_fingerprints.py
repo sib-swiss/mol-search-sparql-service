@@ -7,7 +7,7 @@ from rdkit.Chem import (
     rdFingerprintGenerator,
     RDKFingerprint,
     MACCSkeys,
-    PatternFingerprint
+    PatternFingerprint,
 )
 from rdkit.Chem.AtomPairs import Pairs, Torsions
 
@@ -15,6 +15,7 @@ from rdkit.Chem.AtomPairs import Pairs, Torsions
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FingerprintExplainability:
@@ -51,8 +52,8 @@ class Dataset:
     """All precomputed data for one fingerprint type."""
 
     data: list[CompoundEntry]
-    fps: list[Any]                          # parallel list of raw RDKit FP objects
-    db_indices: dict[str, list[int]]        # db_name → list of indices into data/fps
+    fps: list[Any]  # parallel list of raw RDKit FP objects
+    db_indices: dict[str, list[int]]  # db_name → list of indices into data/fps
 
 
 @dataclass
@@ -113,7 +114,6 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "morgan_fcfp": FingerprintConfig(
         short_name="FCFP",
         python_method=rdFingerprintGenerator.GetMorganGenerator,
@@ -143,7 +143,6 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "rdk_topological": FingerprintConfig(
         short_name="RDK",
         python_method=RDKFingerprint,
@@ -175,7 +174,6 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "atom_pair": FingerprintConfig(
         short_name="AP",
         python_method=Pairs.GetAtomPairFingerprint,  # type: ignore[attr-defined]
@@ -201,7 +199,6 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "topological_torsion": FingerprintConfig(
         short_name="TT",
         python_method=Torsions.GetTopologicalTorsionFingerprint,  # type: ignore[attr-defined]
@@ -211,8 +208,7 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
         explainability=FingerprintExplainability(
             level="medium",
             mechanism=(
-                "Each feature corresponds to a specific 4-atom sequence "
-                "(A–B–C–D)."
+                "Each feature corresponds to a specific 4-atom sequence (A–B–C–D)."
             ),
             limitations="Local view only; torsions are hashed in bit-vector form.",
             typical_explanations=[
@@ -221,7 +217,6 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "maccs": FingerprintConfig(
         short_name="MACCS",
         python_method=MACCSkeys.GenMACCSKeys,  # type: ignore[attr-defined]
@@ -244,16 +239,12 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
             ],
         ),
     ),
-
     "pattern": FingerprintConfig(
         short_name="Pattern",
         python_method=PatternFingerprint,
         default_options={"fpSize": 2048},
         stereo_options={},
-        description=(
-            "RDKit Pattern fingerprint. "
-            "Designed for substructure screening."
-        ),
+        description=("RDKit Pattern fingerprint. Designed for substructure screening."),
         explainability=FingerprintExplainability(
             level="low",
             mechanism=(
@@ -271,7 +262,10 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
 # Helper functions
 # ---------------------------------------------------------------------------
 
-def get_fingerprint(mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = False) -> Any:
+
+def get_fingerprint(
+    mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = False
+) -> Any:
     """
     Generates a fingerprint for a molecule using the specified configuration name.
     Returns an RDKit fingerprint object (ExplicitBitVect or IntSparseIntVect).
@@ -286,7 +280,9 @@ def get_fingerprint(mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = Fal
 
     # Handle FCFP (feature invariants)
     if name == "morgan_fcfp":
-        opts["atomInvariantsGenerator"] = rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
+        opts["atomInvariantsGenerator"] = (
+            rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
+        )
 
     func: Callable[..., Any] = cfg.python_method
 
@@ -315,9 +311,9 @@ def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
     try:
         Chem.SanitizeMol(
             mol,
-            sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^
-                        Chem.SanitizeFlags.SANITIZE_PROPERTIES ^
-                        Chem.SanitizeFlags.SANITIZE_CLEANUP
+            sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+            ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES
+            ^ Chem.SanitizeFlags.SANITIZE_CLEANUP,
         )
         return mol
     except Exception as e:
@@ -328,6 +324,7 @@ def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
 # ---------------------------------------------------------------------------
 # Search engine
 # ---------------------------------------------------------------------------
+
 
 class MolSearchEngine:
     def __init__(self) -> None:
@@ -355,7 +352,9 @@ class MolSearchEngine:
 
         self.datasets[fp_type] = Dataset(data=data, fps=fps, db_indices=db_indices)
 
-    def _get_indices(self, fp_type: str, db_names: list[str] | None = None) -> range | list[int]:
+    def _get_indices(
+        self, fp_type: str, db_names: list[str] | None = None
+    ) -> range | list[int]:
         """
         Helper to get valid indices based on db_names filter.
         Returns a range (all) or a filtered list of integer indices.
@@ -418,7 +417,9 @@ class MolSearchEngine:
         results: list[SimilarityResult] = []
         for i, sim in enumerate(sims):
             if sim >= min_score:
-                results.append(SimilarityResult(compound=target_data[i], similarity=sim))
+                results.append(
+                    SimilarityResult(compound=target_data[i], similarity=sim)
+                )
 
         results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:limit]
@@ -469,16 +470,20 @@ class MolSearchEngine:
                 target_mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
                 if target_mol is None:
                     continue
-                matches = target_mol.GetSubstructMatches(query_mol, useChirality=use_chirality)
+                matches = target_mol.GetSubstructMatches(
+                    query_mol, useChirality=use_chirality
+                )
 
                 if matches and len(matches) >= min_match_count:
-                    results.append(SubstructureResult(
-                        id=entry.id,
-                        smiles=entry.smiles,
-                        db_name=entry.db_name,
-                        fp=entry.fp,
-                        match_count=len(matches),
-                    ))
+                    results.append(
+                        SubstructureResult(
+                            id=entry.id,
+                            smiles=entry.smiles,
+                            db_name=entry.db_name,
+                            fp=entry.fp,
+                            match_count=len(matches),
+                        )
+                    )
 
                     if limit and len(results) >= limit:
                         break
@@ -530,13 +535,10 @@ def compile_fingerprints_in_memory(
     for entry in compounds:
         mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
         if mol:
-                fp = get_fingerprint(mol, fp_type)
-                # Create a new entry with the fingerprint attached
-                data.append(replace(entry, fp=fp))
+            fp = get_fingerprint(mol, fp_type)
+            # Create a new entry with the fingerprint attached
+            data.append(replace(entry, fp=fp))
     return data
-
-
-
 
 
 # Initialize Engine globally for easy sharing

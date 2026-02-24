@@ -1,11 +1,13 @@
 import pytest
 from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
 
+
 @pytest.fixture(scope="module")
 def engine():
     eng = MolSearchEngine()
     eng.load_file("compounds.tsv")
     return eng
+
 
 def test_engine_similarity_search(engine):
     test_mol = "[NH3+][C@@H](Cc1ccccc1)C(=O)[O-]"
@@ -38,6 +40,7 @@ def test_engine_substructure_search(engine):
     # 2. Test limit
     results = engine.search_substructure(smart, limit=2)
     assert len(results) <= 2
+
 
 def test_invalid_fingerprint(engine):
     with pytest.raises(ValueError):

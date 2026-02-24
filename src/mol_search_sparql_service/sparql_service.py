@@ -1,6 +1,9 @@
+import os
 from dataclasses import dataclass
+from contextlib import asynccontextmanager
 from rdflib import URIRef, Namespace
 from rdflib_endpoint import SparqlEndpoint, DatasetExt
+from fastapi import FastAPI
 from mcp.server.fastmcp import FastMCP
 
 from .rdkit_fingerprints import engine, FINGERPRINTS
@@ -8,16 +11,19 @@ from .rdkit_fingerprints import engine, FINGERPRINTS
 # Define Namespace
 FUNC = Namespace("urn:sparql-function:")
 
+
 # Define Result Dataclass
 @dataclass
 class SubstructureSearchResult:
     result: URIRef
     matchCount: int
 
+
 @dataclass
 class SearchResult:
     result: URIRef
     score: float
+
 
 @dataclass
 class FingerprintInfo:
@@ -25,6 +31,7 @@ class FingerprintInfo:
     description: str
     mechanism: str
     shortName: str
+
 
 # Initialize DatasetExt
 g = DatasetExt()
@@ -39,39 +46,48 @@ g.bind("func", FUNC)
 # dataclasses that are serialized over RDF logic.
 # =========================================================================
 
+
 @g.type_function(FUNC)
 def list_fingerprints() -> list[FingerprintInfo]:
     """
-### func:ListFingerprints
-Lists available fingerprint types.
-- `func:fpType` (string, output): The fingerprint type identifier.
-- `func:description` (string, output): Description of the fingerprint.
-- `func:shortName` (string, output): Short name (e.g., ECFP).
-- `func:mechanism` (string, output): Explanation of how it works.
+    ### func:ListFingerprints
+    Lists available fingerprint types.
+    - `func:fpType` (string, output): The fingerprint type identifier.
+    - `func:description` (string, output): Description of the fingerprint.
+    - `func:shortName` (string, output): Short name (e.g., ECFP).
+    - `func:mechanism` (string, output): Explanation of how it works.
     """
     return [
         FingerprintInfo(
             fpType=key,
             description=val.description,
             mechanism=val.explainability.mechanism,
-            shortName=val.short_name
+            shortName=val.short_name,
         )
         for key, val in FINGERPRINTS.items()
     ]
 
+
 @g.type_function(FUNC)
-def similarity_search(smiles: str, limit: int = 10, db_names: str | None = None, fp_type: str = 'morgan_ecfp', use_chirality: bool = False, min_score: float = 0.0) -> list[SearchResult]:
+def similarity_search(
+    smiles: str,
+    limit: int = 10,
+    db_names: str | None = None,
+    fp_type: str = "morgan_ecfp",
+    use_chirality: bool = False,
+    min_score: float = 0.0,
+) -> list[SearchResult]:
     """
-### func:SimilaritySearch
-Performs similarity search based on fingerprints.
-- `func:smiles` (string, required): Query SMILES string.
-- `func:limit` (integer, optional): Maximum results (default 10).
-- `func:dbNames` (string, optional): Filter by database source.
-- `func:fpType` (string, optional): Fingerprint type (default 'morgan_ecfp').
-- `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
-- `func:minScore` (float, optional): Minimum similarity score (default 0.0).
-- `func:result` (URI, output): The matching compound URI.
-- `func:score` (float, output): Tanimoto similarity score (0-1).
+    ### func:SimilaritySearch
+    Performs similarity search based on fingerprints.
+    - `func:smiles` (string, required): Query SMILES string.
+    - `func:limit` (integer, optional): Maximum results (default 10).
+    - `func:dbNames` (string, optional): Filter by database source.
+    - `func:fpType` (string, optional): Fingerprint type (default 'morgan_ecfp').
+    - `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
+    - `func:minScore` (float, optional): Minimum similarity score (default 0.0).
+    - `func:result` (URI, output): The matching compound URI.
+    - `func:score` (float, output): Tanimoto similarity score (0-1).
     """
     try:
         if fp_type not in FINGERPRINTS:
@@ -79,29 +95,55 @@ Performs similarity search based on fingerprints.
             return []
 
         db_list = [db_names] if db_names else None
-        results = engine.search_similarity(smiles, limit=limit, db_names=db_list, fp_type=fp_type, use_chirality=use_chirality, min_score=min_score)
-        return [SearchResult(result=URIRef(r.compound.id), score=float(r.similarity)) for r in results]
+        results = engine.search_similarity(
+            smiles,
+            limit=limit,
+            db_names=db_list,
+            fp_type=fp_type,
+            use_chirality=use_chirality,
+            min_score=min_score,
+        )
+        return [
+            SearchResult(result=URIRef(r.compound.id), score=float(r.similarity))
+            for r in results
+        ]
     except Exception as e:
         print(f"Error in similarity_search: {e}")
         return []
 
+
 @g.type_function(FUNC)
-def substructure_search(smart: str, limit: int = 100, db_names: str | None = None, use_chirality: bool = False, min_match_count: int = 1) -> list[SubstructureSearchResult]:
+def substructure_search(
+    smart: str,
+    limit: int = 100,
+    db_names: str | None = None,
+    use_chirality: bool = False,
+    min_match_count: int = 1,
+) -> list[SubstructureSearchResult]:
     """
-### func:SubstructureSearch
-Performs substructure search.
-- `func:smart` (string, required): Query SMARTS or SMILES pattern.
-- `func:limit` (integer, optional): Maximum results (default 100).
-- `func:dbNames` (string, optional): Filter by database source.
-- `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
-- `func:minMatchCount` (integer, optional): Minimum matches required (default 1).
-- `func:result` (URI, output): The matching compound URI.
-- `func:matchCount` (integer, output): Number of matches found (1 if boolean match).
+    ### func:SubstructureSearch
+    Performs substructure search.
+    - `func:smart` (string, required): Query SMARTS or SMILES pattern.
+    - `func:limit` (integer, optional): Maximum results (default 100).
+    - `func:dbNames` (string, optional): Filter by database source.
+    - `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
+    - `func:minMatchCount` (integer, optional): Minimum matches required (default 1).
+    - `func:result` (URI, output): The matching compound URI.
+    - `func:matchCount` (integer, output): Number of matches found (1 if boolean match).
     """
     try:
         db_list = [db_names] if db_names else None
-        results = engine.search_substructure(smart, limit=limit, db_names=db_list, use_chirality=use_chirality, min_match_count=min_match_count)
-        return [SubstructureSearchResult(result=URIRef(r.id), matchCount=int(r.match_count)) for r in results]
+        results = engine.search_substructure(
+            smart,
+            limit=limit,
+            db_names=db_list,
+            use_chirality=use_chirality,
+            min_match_count=min_match_count,
+        )
+        return [
+            SubstructureSearchResult(result=URIRef(r.id), matchCount=int(r.match_count))
+            for r in results
+        ]
     except Exception as e:
         print(f"Error in substructure_search: {e}")
         return []
@@ -117,6 +159,7 @@ Performs substructure search.
 
 mcp = FastMCP("Chemistry Search")
 
+
 # Dynamic Docstring Injection
 def _update_docstrings():
     fp_descriptions = []
@@ -127,9 +170,13 @@ def _update_docstrings():
     fp_doc = "\n    ".join(fp_descriptions)
 
     if similarity_search.__doc__:
-        similarity_search.__doc__ += f"\n    Available Fingerprint Types:\n    {fp_doc}\n    "
+        similarity_search.__doc__ += (
+            f"\n    Available Fingerprint Types:\n    {fp_doc}\n    "
+        )
+
 
 _update_docstrings()
+
 
 def _assemble_schema() -> str:
     header = """
@@ -143,7 +190,7 @@ Prefix: `func:` <urn:sparql-function:>
     classes = [
         similarity_search.__doc__,
         substructure_search.__doc__,
-        list_fingerprints.__doc__
+        list_fingerprints.__doc__,
     ]
     footer = """
 ## Examples
@@ -172,10 +219,12 @@ SELECT ?result WHERE {
 """
     return header + "\n".join(d.strip() for d in classes if d) + footer
 
+
 @mcp.resource("sparql://schema")
 def sparql_schema() -> str:
     """Returns the generated SPARQL schema for the chemistry search service."""
     return _assemble_schema()
+
 
 @mcp.prompt()
 def sparql_assistant() -> str:
@@ -192,36 +241,36 @@ The SPARQL endpoint listens to `HTTP GET` and `HTTP POST` typically located at `
 
 
 # Create the SparqlEndpoint using the DatasetExt 'g'
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: load the compounds file into the engine if needed
+    compounds_file = os.environ.get("COMPOUNDS_FILE")
+    if compounds_file and not engine.datasets:
+        print(f"Initializing engine from: {compounds_file}")
+        try:
+            engine.load_file(compounds_file)
+        except Exception as e:
+            print(f"Error loading compounds file on startup: {e}")
+    yield
+    # Shutdown: attempt to cleanup temp files if requested
+    delete_file = os.environ.get("DELETE_COMPOUNDS_FILE")
+    compounds_file = os.environ.get("COMPOUNDS_FILE")
+    if delete_file == "1" and compounds_file and os.path.exists(compounds_file):
+        try:
+            os.remove(compounds_file)
+        except Exception:
+            pass
+
+
+# Create the SparqlEndpoint using the DatasetExt 'g' and a FastAPI lifespan
 app = SparqlEndpoint(
     graph=g,
     path="/sparql",
     cors_enabled=True,
+    lifespan=lifespan,
     # Functions are already registered via decorators on 'g'
 )
 
-# Startup event to load data in worker processes
-import os
-import atexit
-
-@app.on_event("startup")
-async def startup_event():
-    compounds_file = os.environ.get('COMPOUNDS_FILE')
-    # If the engine has no datasets (wasn't loaded by main.py due to workers>1), load it now
-    if compounds_file and not engine.datasets:
-        print(f"Worker initializing engine from: {compounds_file}")
-        engine.load_file(compounds_file)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    # Attempt to cleanup temp files if this is the "main" process
-    # (or just let the OS handle temp files).
-    delete_file = os.environ.get('DELETE_COMPOUNDS_FILE')
-    compounds_file = os.environ.get('COMPOUNDS_FILE')
-    if delete_file == '1' and compounds_file and os.path.exists(compounds_file):
-        try:
-            os.remove(compounds_file)
-        except:
-            pass
 
 # Mount MCP Server (FastMCP's internal app)
 app.mount("/mcp", mcp.sse_app())

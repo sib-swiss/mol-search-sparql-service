@@ -4,7 +4,7 @@ import pytest
 import requests
 import time
 import socket
-from multiprocessing import Process, set_start_method
+from multiprocessing import Process
 import uvicorn
 from mol_search_sparql_service.rdkit_fingerprints import engine
 from mol_search_sparql_service.sparql_service import app
@@ -12,14 +12,17 @@ from mol_search_sparql_service.sparql_service import app
 PORT = 8000
 URL = f"http://localhost:{PORT}/sparql"
 
+
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('localhost', port)) == 0
+        return s.connect_ex(("localhost", port)) == 0
+
 
 def _run_server():
     print("Loading data for test SPARQL server in child process...")
     engine.load_file("compounds.tsv")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+
 
 @pytest.fixture(scope="module", autouse=True)
 def sparql_server():
@@ -41,7 +44,10 @@ def sparql_server():
 
             try:
                 # Basic check to see if we get a response
-                requests.get(f"http://localhost:{PORT}/sparql?query=SELECT * WHERE {{}} LIMIT 1", timeout=1)
+                requests.get(
+                    f"http://localhost:{PORT}/sparql?query=SELECT * WHERE {{}} LIMIT 1",
+                    timeout=1,
+                )
                 break
             except requests.exceptions.RequestException:
                 time.sleep(1)
@@ -57,13 +63,17 @@ def sparql_server():
 
 
 def sparql_query(query: str) -> Any:
-    response = requests.get(URL, params={'query': query}, headers={'Accept': 'application/sparql-results+json'})
+    response = requests.get(
+        URL,
+        params={"query": query},
+        headers={"Accept": "application/sparql-results+json"},
+    )
     response.raise_for_status()
     return response.json()["results"]["bindings"]
 
 
-
 # --- TESTS ---
+
 
 def test_similarity_search_default():
     test_mol = "[NH3+][C@@H](Cc1ccccc1)C(=O)[O-]"
@@ -98,17 +108,18 @@ def test_similarity_search_limit():
 
 def test_substructure_search_default():
     # Benzene ring
-    bindings = sparql_query(f"""
+    bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?matchCount WHERE {{
+        SELECT ?result ?matchCount WHERE {
             [] a func:SubstructureSearch ;
                 func:smart "c1ccccc1" ;
                 func:result ?result ;
                 func:matchCount ?matchCount .
-        }}
+        }
     """)
     assert len(bindings) > 0
     assert "matchCount" in bindings[0]
+
 
 def test_list_fingerprints():
     bindings = sparql_query("""

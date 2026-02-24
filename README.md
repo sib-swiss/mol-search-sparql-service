@@ -62,3 +62,9 @@ Run tests:
 uv run pytest
 ```
 
+Format and lint:
+
+```sh
+uvx ruff format && uvx ruff check --fix
+```
+
