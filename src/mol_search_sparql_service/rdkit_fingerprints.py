@@ -1,6 +1,5 @@
 import csv
 import os
-import sys
 import tempfile
 from typing import Any, Callable
 from dataclasses import dataclass, replace
@@ -22,6 +21,8 @@ from rdkit.Chem.AtomPairs import Pairs, Torsions
 
 @dataclass
 class FingerprintExplainability:
+    """Explainability information for a fingerprint type, used for documentation and UI hints."""
+
     level: str
     mechanism: str
     limitations: str
@@ -269,9 +270,10 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
 def get_fingerprint(
     mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = False
 ) -> Any:
-    """
-    Generates a fingerprint for a molecule using the specified configuration name.
-    Returns an RDKit fingerprint object (ExplicitBitVect or IntSparseIntVect).
+    """Generates a fingerprint for a molecule using the specified configuration name.
+
+    Returns:
+        An RDKit fingerprint object (`ExplicitBitVect` or `IntSparseIntVect`).
     """
     if name not in FINGERPRINTS:
         raise ValueError(f"Unknown fingerprint type: {name}")
@@ -336,8 +338,8 @@ class MolSearchEngine:
         self.datasets: dict[str, Dataset] = {}
 
     def add_data(self, data: list[CompoundEntry], fp_type: str) -> None:
-        """
-        Populate the engine with a list of CompoundEntry objects.
+        """Populate the engine with a list of CompoundEntry objects.
+
         Each entry must have a precomputed 'fp' and optionally a 'db_name'.
         """
         # Optimization: Pre-calculate indices for each db_name
@@ -358,9 +360,10 @@ class MolSearchEngine:
     def _get_indices(
         self, fp_type: str, db_names: list[str] | None = None
     ) -> range | list[int]:
-        """
-        Helper to get valid indices based on db_names filter.
-        Returns a range (all) or a filtered list of integer indices.
+        """Helper to get valid indices based on db_names filter.
+
+        Returns:
+            A range (all) or a filtered list of integer indices.
         """
         dataset = self.datasets.get(fp_type)
         if not dataset:
@@ -385,9 +388,7 @@ class MolSearchEngine:
         use_chirality: bool = False,
         min_score: float = 0.0,
     ) -> list[SimilarityResult]:
-        """
-        Executes a similarity search.
-        """
+        """Executes a similarity search."""
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
@@ -436,9 +437,7 @@ class MolSearchEngine:
         fp_type: str = "pattern",
         min_match_count: int = 1,
     ) -> list[SubstructureResult]:
-        """
-        Executes a substructure search (Screening + Verification).
-        """
+        """Executes a substructure search (Screening + Verification)."""
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
@@ -495,7 +494,8 @@ class MolSearchEngine:
         return results
 
     def load_from_sparql(self, endpoint: str, query: str) -> None:
-        """Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
+        """
+        Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
         and load it into the engine. The temp file path is stored in the
         COMPOUNDS_FILE environment variable so that additional Uvicorn workers can
         reload the same data on startup without re-querying the endpoint.
@@ -563,6 +563,7 @@ class MolSearchEngine:
 def compile_fingerprints_in_memory(
     compounds: list[CompoundEntry], fp_type: str
 ) -> list[CompoundEntry]:
+    """Compiles fingerprints for a list of `CompoundEntry` objects in-memory without writing to disk."""
     data: list[CompoundEntry] = []
     for entry in compounds:
         mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)

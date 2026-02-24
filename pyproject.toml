@@ -8,7 +8,7 @@ requires-python = ">=3.13"
 dependencies = [
     "mcp>=1.26.0",
     "rdflib>=7.6.0",
-    "rdflib-endpoint>=0.6.0",
+    "rdflib-endpoint>=0.6.1",
     "rdkit>=2025.9.4",
     "requests>=2.32.5",
     "uvicorn>=0.41.0",

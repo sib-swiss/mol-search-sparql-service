@@ -434,7 +434,7 @@ dev = [
 requires-dist = [
     { name = "mcp", specifier = ">=1.26.0" },
     { name = "rdflib", specifier = ">=7.6.0" },
-    { name = "rdflib-endpoint", specifier = ">=0.6.0" },
+    { name = "rdflib-endpoint", specifier = ">=0.6.1" },
     { name = "rdkit", specifier = ">=2025.9.4" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "uvicorn", specifier = ">=0.41.0" },
@@ -770,15 +770,15 @@ wheels = [
 
 [[package]]
 name = "rdflib-endpoint"
-version = "0.6.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "rdflib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/99/94804eb700d62fdf73f2cbc9de4c013c78b5682cbcb754a63d513022ab62/rdflib_endpoint-0.6.0.tar.gz", hash = "sha256:f9ed456c463cb24f656a735dd5237542d0d5958a4722a221899abf7de3893b3e", size = 243057, upload-time = "2026-02-17T16:50:15.985Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/79/ca/8a77260061752021cb4508234e51f86c0dbb26cb2ffc7696875bb21c7684/rdflib_endpoint-0.6.1.tar.gz", hash = "sha256:4a5366196b9f955638e37ccc3bbdb2106162e5ac8fa4f0cefac1766f7dbd87e2", size = 249529, upload-time = "2026-02-24T13:40:10.504Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/14/11b0e89cfef9edd509a8b95055baabe47f5b5daffb93f4aba009a5bcfc44/rdflib_endpoint-0.6.0-py3-none-any.whl", hash = "sha256:d417a6e440a6f3869406feaa13b002e6913f29933ecca91c78f22a0c5ca3a56f", size = 26257, upload-time = "2026-02-17T16:50:13.98Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/5f/5c2ba716cfa6fb098ef275f8c573b9f9282bb74dec0e15964ca2e1283a8e/rdflib_endpoint-0.6.1-py3-none-any.whl", hash = "sha256:940a8cc5b6401ff5be9fb2173e6015360253da781e2a1163bd97859617e6f6d3", size = 30821, upload-time = "2026-02-24T13:40:08.759Z" },
 ]
 
 [[package]]

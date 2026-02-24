@@ -16,21 +16,29 @@ FUNC = Namespace("urn:sparql-function:")
 @dataclass
 class SubstructureSearchResult:
     result: URIRef
+    """The URI of the matching compound."""
     matchCount: int
+    """Number of matches found (1 if boolean match)."""
 
 
 @dataclass
 class SearchResult:
     result: URIRef
+    """The URI of the matching compound."""
     score: float
+    """Tanimoto similarity score (0-1)."""
 
 
 @dataclass
 class FingerprintInfo:
     fpType: str
+    """Identifier key for the fingerprint type (e.g. `morgan_ecfp`)."""
     description: str
+    """Human readable description of the fingerprint."""
     mechanism: str
+    """Explainability mechanism / how bits map to substructures."""
     shortName: str
+    """Short display name for the fingerprint (e.g. ECFP, MACCS)."""
 
 
 # Initialize DatasetExt
@@ -47,15 +55,20 @@ g.bind("func", FUNC)
 # =========================================================================
 
 
-@g.type_function(FUNC)
+@g.type_function()
 def list_fingerprints() -> list[FingerprintInfo]:
-    """
-    ### func:ListFingerprints
-    Lists available fingerprint types.
-    - `func:fpType` (string, output): The fingerprint type identifier.
-    - `func:description` (string, output): Description of the fingerprint.
-    - `func:shortName` (string, output): Short name (e.g., ECFP).
-    - `func:mechanism` (string, output): Explanation of how it works.
+    """List available fingerprint types.
+
+    Example:
+        ```sparql
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?fpType ?description ?shortName WHERE {
+            [] a func:ListFingerprints ;
+                func:fpType ?fpType ;
+                func:description ?description ;
+                func:shortName ?shortName .
+        }
+        ```
     """
     return [
         FingerprintInfo(
@@ -68,7 +81,7 @@ def list_fingerprints() -> list[FingerprintInfo]:
     ]
 
 
-@g.type_function(FUNC)
+@g.type_function()
 def similarity_search(
     smiles: str,
     limit: int = 10,
@@ -77,17 +90,27 @@ def similarity_search(
     use_chirality: bool = False,
     min_score: float = 0.0,
 ) -> list[SearchResult]:
-    """
-    ### func:SimilaritySearch
-    Performs similarity search based on fingerprints.
-    - `func:smiles` (string, required): Query SMILES string.
-    - `func:limit` (integer, optional): Maximum results (default 10).
-    - `func:dbNames` (string, optional): Filter by database source.
-    - `func:fpType` (string, optional): Fingerprint type (default 'morgan_ecfp').
-    - `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
-    - `func:minScore` (float, optional): Minimum similarity score (default 0.0).
-    - `func:result` (URI, output): The matching compound URI.
-    - `func:score` (float, output): Tanimoto similarity score (0-1).
+    """Perform similarity search using precomputed fingerprints.
+
+    Args:
+        smiles: Query SMILES string.
+        limit: Maximum number of results to return.
+        db_names: Optional database name to filter results.
+        fp_type: Fingerprint type key to use.
+        use_chirality: Whether to respect chirality when computing fingerprints.
+        min_score: Minimum similarity score threshold (0.0 - 1.0).
+
+    Example:
+        ```sparql
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?score WHERE {
+            [] a func:SimilaritySearch ;
+                func:smiles "[NH3+][C@@H](Cc1ccccc1)C(=O)[O-]" ;
+                func:limit 3 ;
+                func:result ?result ;
+                func:score ?score .
+        }
+        ```
     """
     try:
         if fp_type not in FINGERPRINTS:
@@ -112,7 +135,7 @@ def similarity_search(
         return []
 
 
-@g.type_function(FUNC)
+@g.type_function()
 def substructure_search(
     smart: str,
     limit: int = 100,
@@ -120,16 +143,25 @@ def substructure_search(
     use_chirality: bool = False,
     min_match_count: int = 1,
 ) -> list[SubstructureSearchResult]:
-    """
-    ### func:SubstructureSearch
-    Performs substructure search.
-    - `func:smart` (string, required): Query SMARTS or SMILES pattern.
-    - `func:limit` (integer, optional): Maximum results (default 100).
-    - `func:dbNames` (string, optional): Filter by database source.
-    - `func:useChirality` (boolean, optional): Whether to respect chirality (default false).
-    - `func:minMatchCount` (integer, optional): Minimum matches required (default 1).
-    - `func:result` (URI, output): The matching compound URI.
-    - `func:matchCount` (integer, output): Number of matches found (1 if boolean match).
+    """Perform substructure search using a SMARTS/SMILES pattern.
+
+    Args:
+        smart: Query SMARTS or SMILES pattern to match.
+        limit: Maximum number of results to return (default: 100).
+        db_names: Optional database name to limit the search.
+        use_chirality: Whether to respect chirality for matching.
+        min_match_count: Minimum number of substructure matches required.
+
+    Example:
+        ```sparql
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchCount WHERE {
+            [] a func:SubstructureSearch ;
+                func:smart "c1ccccc1" ;
+                func:result ?result ;
+                func:matchCount ?matchCount .
+        }
+        ```
     """
     try:
         db_list = [db_names] if db_names else None
@@ -149,6 +181,20 @@ def substructure_search(
         return []
 
 
+def generate_docs() -> str:
+    """Return markdown documentation for all SPARQL functions and fingerprint options."""
+    # g.generate_docs() returns markdown for every registered @g.type_function
+    docs = g.generate_docs()
+    # Append fingerprint options table
+    fp_lines = ["## Available Fingerprint Types\n"]
+    fp_lines.append("| Key | Short Name | Description |")
+    fp_lines.append("|-----|------------|-------------|")
+    for key, fp in FINGERPRINTS.items():
+        desc = " ".join(fp.description.split())
+        fp_lines.append(f"| `{key}` | {fp.short_name} | {desc} |")
+    return "\n## Functions\n\n" + docs.rstrip() + "\n\n" + "\n".join(fp_lines) + "\n"
+
+
 # =========================================================================
 # MCP Documenting & Helper Endpoints
 # =========================================================================
@@ -157,86 +203,24 @@ def substructure_search(
 # can easily understand how to construct valid SPARQL against the service.
 # =========================================================================
 
-mcp = FastMCP("Chemistry Search")
-
-
-# Dynamic Docstring Injection
-def _update_docstrings():
-    fp_descriptions = []
-    for key, val in FINGERPRINTS.items():
-        desc = f"- {key}: {val.description}"
-        fp_descriptions.append(desc)
-
-    fp_doc = "\n    ".join(fp_descriptions)
-
-    if similarity_search.__doc__:
-        similarity_search.__doc__ += (
-            f"\n    Available Fingerprint Types:\n    {fp_doc}\n    "
-        )
-
-
-_update_docstrings()
-
-
-def _assemble_schema() -> str:
-    header = """
-# SPARQL Schema for Chemistry Search Service
-
-## Namespace
-Prefix: `func:` <urn:sparql-function:>
-
-## Classes
-"""
-    classes = [
-        similarity_search.__doc__,
-        substructure_search.__doc__,
-        list_fingerprints.__doc__,
-    ]
-    footer = """
-## Examples
-
-### Identify Similar Molecules
-```sparql
-PREFIX func: <urn:sparql-function:>
-SELECT ?result ?score WHERE {
-    [] a func:SimilaritySearch ;
-       func:smiles "c1ccccc1" ;
-       func:fpType "morgan_ecfp" ;
-       func:result ?result ;
-       func:score ?score .
-}
-```
-
-### Identify Substructures
-```sparql
-PREFIX func: <urn:sparql-function:>
-SELECT ?result WHERE {
-    [] a func:SubstructureSearch ;
-       func:smart "C(=O)O" ;
-       func:result ?result .
-}
-```
-"""
-    return header + "\n".join(d.strip() for d in classes if d) + footer
+mcp = FastMCP("Chemistry Search SPARQL service")
 
 
 @mcp.resource("sparql://schema")
 def sparql_schema() -> str:
     """Returns the generated SPARQL schema for the chemistry search service."""
-    return _assemble_schema()
+    return generate_docs()
 
 
 @mcp.prompt()
 def sparql_assistant() -> str:
-    """
-    Interactive prompt providing the SPARQL schema and writing guidelines for the Chemistry Search Service.
-    """
-    return f"""You are an expert in writing SPARQL queries for the specific Chemistry Search Service.
-Use the following documentation to assist in writing correct queries strictly matching the defined `func:` namespaces and classes:
+    """Interactive prompt providing schema and guidelines for writing SPARQL against this service."""
+    return f"""You are an expert in writing SPARQL queries for the Chemistry Search Service.
+Use the following documentation to write correct queries that strictly match the defined `func:` namespace and classes:
 
-{_assemble_schema()}
+{generate_docs()}
 
-The SPARQL endpoint listens to `HTTP GET` and `HTTP POST` typically located at `/sparql` on the hosting server.
+The SPARQL endpoint accepts `HTTP GET` and `HTTP POST`, typically at `/sparql` on the hosting server.
 """
 
 
