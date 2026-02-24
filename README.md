@@ -1,8 +1,28 @@
 # Chemistry Search SPARQL Service
 
-A SPARQL service for finding similar chemicals and substructures using molecular fingerprints. Built using **RDKit**.
+A SPARQL service for finding similar chemicals and substructures using molecular fingerprints. 
 
-## Installation
+## 🧩 Features
+
+- **SPARQL endpoint**: Query for similarity and substructure matches using standard SPARQL syntax. You can also query this service from another SPARQL endpoint using the `SERVICE` clause:
+
+  ```sparql
+  PREFIX func: <urn:sparql-function:>
+  SELECT ?result ?score WHERE {
+    SERVICE <http://localhost:8000/sparql> {
+      [] a func:SimilaritySearch ;
+         func:smiles "c1ccccc1" ;
+         func:result ?result ;
+         func:score ?score .
+    }
+  }
+  ```
+
+- **MCP Server**: Exposes SPARQL functions documentation through resource and prompt to help LLMs to perform searches (experimental).
+
+Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https://github.com/vemonet/rdflib-endpoint).
+
+## 📥 Installation
 
 You can install this tool directly from GitHub using `uv`:
 
@@ -10,7 +30,7 @@ You can install this tool directly from GitHub using `uv`:
 uv tool install git+https://github.com/sib-swiss/mol-search-sparql-service.git
 ```
 
-## Usage
+## 🚀 Usage
 
 Start the service by pointing it to a compounds data file (TSV):
 
@@ -33,28 +53,6 @@ mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql
 ```
 
 Other available optional flags include `-w` (`--workers`) to deploy multiple Uvicorn worker processes (default 1) and `-d` (`--daemon`) to run the server in the background and write stdout/stderr to `server.log`. Port defaults to `8010` if `-p` is omitted.
-
-## Features
-
--   **SPARQL Endpoint**: Query for similarity and substructure matches using standard SPARQL syntax.
--   **MCP Server**: Exposes tools for LLMs to perform searches.
--   **Introspection**: Discover available fingerprint types and schema details.
-
-### Federated Query (SERVICE clause)
-
-You can also query this service from another SPARQL endpoint using the `SERVICE` clause:
-
-```sparql
-PREFIX func: <urn:sparql-function:>
-SELECT ?result ?score WHERE {
-  SERVICE <http://localhost:8000/sparql> {
-    [] a func:SimilaritySearch ;
-       func:smiles "c1ccccc1" ;
-       func:result ?result ;
-       func:score ?score .
-  }
-}
-```
 
 <!-- AUTOGEN_DOCS_START -->
 
@@ -175,7 +173,7 @@ SELECT ?result ?matchCount WHERE {
 
 <!-- AUTOGEN_DOCS_END -->
 
-## Development
+## 🛠️ Development
 
 Run tests:
 
