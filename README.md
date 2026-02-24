@@ -1,6 +1,6 @@
 # 🫆 Chemistry Search SPARQL Service
 
-A SPARQL service for finding similar chemicals and substructures using molecular fingerprints.
+A service for finding similar chemicals and substructures using molecular fingerprints. It provides both a SPARQL endpoint and an MCP (Model Context Protocol) server interface.
 
 Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https://github.com/vemonet/rdflib-endpoint).
 
