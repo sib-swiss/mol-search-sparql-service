@@ -1,4 +1,7 @@
 import csv
+import os
+import sys
+import tempfile
 from typing import Any, Callable
 from dataclasses import dataclass, replace
 from rdkit import Chem
@@ -491,7 +494,36 @@ class MolSearchEngine:
                 continue
         return results
 
+    def load_from_sparql(self, endpoint: str, query: str) -> None:
+        """Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
+        and load it into the engine. The temp file path is stored in the
+        COMPOUNDS_FILE environment variable so that additional Uvicorn workers can
+        reload the same data on startup without re-querying the endpoint.
+        """
+        import requests
+
+        print(f"Fetching data from {endpoint}...")
+        try:
+            resp = requests.post(
+                endpoint,
+                data={"query": query},
+                headers={"Accept": "text/tab-separated-values"},
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            raise RuntimeError(f"Failed to fetch data from SPARQL endpoint: {e}") from e
+
+        fd, temp_path = tempfile.mkstemp(suffix=".tsv")
+        with os.fdopen(fd, "wb") as f:
+            f.write(resp.content)
+
+        # Signal workers to delete the temp file on shutdown
+        os.environ["DELETE_COMPOUNDS_FILE"] = "1"
+        self.load_file(temp_path)
+
     def load_file(self, compounds_file: str) -> None:
+        # Persist the path so that additional Uvicorn workers can pick it up
+        os.environ["COMPOUNDS_FILE"] = compounds_file
         print(f"Reading compounds from {compounds_file}...")
         compounds: list[CompoundEntry] = []
         with open(compounds_file, "r", encoding="utf-8") as f:

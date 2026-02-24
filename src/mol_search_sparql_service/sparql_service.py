@@ -240,10 +240,9 @@ The SPARQL endpoint listens to `HTTP GET` and `HTTP POST` typically located at `
 """
 
 
-# Create the SparqlEndpoint using the DatasetExt 'g'
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: load the compounds file into the engine if needed
+    # Startup: load the compounds file into the engine if needed (multi-worker case)
     compounds_file = os.environ.get("COMPOUNDS_FILE")
     if compounds_file and not engine.datasets:
         print(f"Initializing engine from: {compounds_file}")
@@ -252,23 +251,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Error loading compounds file on startup: {e}")
     yield
-    # Shutdown: attempt to cleanup temp files if requested
-    delete_file = os.environ.get("DELETE_COMPOUNDS_FILE")
-    compounds_file = os.environ.get("COMPOUNDS_FILE")
-    if delete_file == "1" and compounds_file and os.path.exists(compounds_file):
-        try:
-            os.remove(compounds_file)
-        except Exception:
-            pass
 
 
-# Create the SparqlEndpoint using the DatasetExt 'g' and a FastAPI lifespan
 app = SparqlEndpoint(
     graph=g,
     path="/sparql",
     cors_enabled=True,
     lifespan=lifespan,
-    # Functions are already registered via decorators on 'g'
 )
 
 

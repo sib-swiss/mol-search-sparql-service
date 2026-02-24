@@ -1,7 +1,5 @@
 import argparse
 import uvicorn
-import requests
-import tempfile
 import os
 import sys
 
@@ -9,7 +7,7 @@ from .rdkit_fingerprints import engine
 from .sparql_service import app
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Start the Chemistry SPARQL Service")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-f", "--file", help="Path to compounds.tsv")
@@ -40,38 +38,13 @@ def main():
     if args.sparql and not args.endpoint:
         parser.error("-s/--sparql requires -e/--endpoint")
 
-    # 1. Compile Data
+    # 1. Load Data
     if args.file:
         engine.load_file(args.file)
     else:
         with open(args.sparql, "r") as f:
             query = f.read()
-
-        print(f"Fetching data from {args.endpoint}...")
-        try:
-            # We request TSV directly from the SPARQL endpoint
-            headers = {"Accept": "text/tab-separated-values"}
-            resp = requests.post(args.endpoint, data={"query": query}, headers=headers)
-            resp.raise_for_status()
-
-            fd, temp_path = tempfile.mkstemp(suffix=".tsv")
-            # Important: Keep the temp file around for workers by not deleting it immediately
-            with os.fdopen(fd, "wb") as f:
-                f.write(resp.content)
-
-            # Pass to environment so workers can use it
-            os.environ["COMPOUNDS_FILE"] = temp_path
-            os.environ["DELETE_COMPOUNDS_FILE"] = "1"
-
-            engine.load_file(temp_path)
-            # We will rely on sparql_service or OS to clean this up, or clean it up after uvicorn exits.
-        except Exception as e:
-            print(f"Failed to fetch data from endpoint: {e}")
-            sys.exit(1)
-
-    # Store explicit file path in environment for workers
-    if args.file:
-        os.environ["COMPOUNDS_FILE"] = args.file
+        engine.load_from_sparql(args.endpoint, query)
 
     # Daemonize if requested
     if args.daemon:
