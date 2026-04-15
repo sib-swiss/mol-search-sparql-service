@@ -199,3 +199,11 @@ To release a new version run the release script providing the version bump: `fix
 .github/release.sh fix
 ```
 
+Generate slides:
+
+```sh
+cd slides
+npm i
+npm run dev
+npm run build
+```

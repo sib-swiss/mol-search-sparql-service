@@ -10,6 +10,11 @@ wheels/
 # Virtual environments
 .venv
 
+# JS
+node_modules/
+dist/
+package-lock.json
+
 # IDEs and OS
 .DS_Store
 .vscode/
