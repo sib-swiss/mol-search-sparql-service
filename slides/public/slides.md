@@ -1,4 +1,4 @@
-# Extending SPARQL with Python
+## Extending SPARQL with Python
 
 **Make Python functions queryable in a SPARQL endpoint**
 
@@ -322,9 +322,10 @@ LLMs can read the schema resource and write correct SPARQL queries against the s
 **Install:**
 
 ```sh
-pip install "rdflib-endpoint[cli]"
+uv add "rdflib-endpoint[web]"
+pip install "rdflib-endpoint[web]"
 ```
 
-**Source:** [github.com/vemonet/rdflib-endpoint](https://github.com/vemonet/rdflib-endpoint)
+**Library:** [github.com/vemonet/rdflib-endpoint](https://github.com/vemonet/rdflib-endpoint)
 
 **Reference implementation:** [github.com/sib-swiss/mol-search-sparql-service](https://github.com/sib-swiss/mol-search-sparql-service)
