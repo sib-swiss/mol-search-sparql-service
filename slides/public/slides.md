@@ -39,6 +39,8 @@ But knowledge graphs are not just data, they are increasingly paired with comput
 Write a Python function. Get a working SPARQL endpoint. No triplestore plugins, no RDF parsing, no boilerplate.
 
 ```python
+ds = DatasetExt()
+
 @dataclass
 class SearchResult:
     result: URIRef
@@ -77,13 +79,13 @@ SELECT ?compound ?score WHERE {
 5. Return values become SPARQL result bindings automatically
 
 
-Type annotations and dataclasses handle all the IRI and binding mapping.
+Idiomatic python: type annotations and dataclasses handle all the IRI and binding mapping.
 
 ---
 
 ## `DatasetExt`: 4 decorator patterns
 
-`rdflib-endpoint` extends RDFLib's `Dataset` with decorator helpers:
+`rdflib-endpoint` extends RDFLib's `Dataset` with decorator helpers, covering most custom evaluation use-cases observed in the wild:
 
 | Decorator             | Triggered by SPARQL pattern          | Best for                        |
 | --------------------- | ------------------------------------ | ------------------------------- |
@@ -307,7 +309,7 @@ LLMs can read the schema resource and write correct SPARQL queries against the s
 
 - Pure Python: no RDF or SPARQL parsing for the implementer, type annotations and dataclasses drive all IRI and binding mapping, python defaults handle optional SPARQL inputs
 - Works with federated `SERVICE` out of the box
-
+- Enable building flexible Virtual Knowledge Graphs in a few lines of python
 
 **Current limitations:**
 
