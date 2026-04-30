@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import os
 import tempfile
@@ -12,6 +13,21 @@ from rdkit.Chem import (
     PatternFingerprint,
 )
 from rdkit.Chem.AtomPairs import Pairs, Torsions
+
+# NOTE: we need to silence RDKit warnings that magically poped up from nowhere
+# even if it was working before, and no libs version have been changed
+@contextlib.contextmanager
+def _silence_stderr():
+    """Redirect fd 2 to /dev/null to suppress C++-level stderr output."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    saved = os.dup(2)
+    os.dup2(devnull, 2)
+    try:
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        os.close(devnull)
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +312,9 @@ def get_fingerprint(
         return generator.GetFingerprint(mol)
     else:
         # For others (including pattern), options are passed directly to the function along with mol
-        return func(mol, **opts)
+        # atom_pair and topological_torsion print C++-level deprecation spam on every call
+        with _silence_stderr():
+            return func(mol, **opts)
 
 
 def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:

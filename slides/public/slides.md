@@ -15,7 +15,8 @@ But knowledge graphs are not just data, they are increasingly paired with comput
 - Cheminformatics: molecular similarity, fingerprinting, substructure search
 - NLP: named entity recognition, embedding similarity
 - ML inference: scoring, classification, ranking
-- Any domain-specific function you can write in Python
+
+Python is one of the most popular solution for in research and data libraries
 
 
 > **SPARQL has no native way to run arbitrary computation.**
@@ -34,11 +35,29 @@ But knowledge graphs are not just data, they are increasingly paired with comput
 
 ---
 
+## Inspirations
+
+- Goes back 10 years ago with Jerven's identifiers.org custom java service
+- FastAPI for the API design and dev experience
+- RDFLib for RDF in python
+
+Extending an existing known library: `rdflib-endpoint` (by Vincent)
+
+RDFLib is a RDF python library with everything needed to do most RDF task (e.g. SPARQL query engine)
+
+RDFLib-endpoint enables to easily deploy graph built with RDFLib
+
+Already used by projects like [bioregistry.io/sparql](https://bioregistry.io/sparql)
+
+---
+
 ## The goal
 
 Write a Python function. Get a working SPARQL endpoint. No triplestore plugins, no RDF parsing, no boilerplate.
 
 ```python
+from rdflib_endpoint import DatasetExt
+
 ds = DatasetExt()
 
 @dataclass
@@ -66,23 +85,6 @@ SELECT ?compound ?score WHERE {
 
 ---
 
-## How rdflib-endpoint works
-
-`rdflib-endpoint` builds on RDFLib's custom evaluation hook to intercept query patterns and dispatch them to Python functions.
-
-**The flow:**
-
-1. Decorate a Python function with `@ds.type_function()` (or other patterns)
-2. rdflib-endpoint registers it in RDFLib's evaluation engine
-3. Serve the dataset as a SPARQL 1.1 endpoint (using FastAPI)
-4. Incoming queries that match the pattern trigger your function
-5. Return values become SPARQL result bindings automatically
-
-
-Idiomatic python: type annotations and dataclasses handle all the IRI and binding mapping.
-
----
-
 ## `DatasetExt`: 4 decorator patterns
 
 `rdflib-endpoint` extends RDFLib's `Dataset` with decorator helpers, covering most custom evaluation use-cases observed in the wild:
@@ -95,6 +97,23 @@ Idiomatic python: type annotations and dataclasses handle all the IRI and bindin
 | `@graph_function`     | `BIND(func:funcName(...) AS ?g)`     | Return a temporary named graph  |
 
 Python snake_case names are automatically mapped to SPARQL camelCase/PascalCase IRIs under the configured namespace (default to `urn:sparql-function:`).
+
+---
+
+## How rdflib-endpoint works
+
+`rdflib-endpoint` builds on RDFLib's custom evaluation hook to intercept query patterns and dispatch them to Python functions.
+
+**The flow:**
+
+1. Create a RDFLib `ds = DatasetExt()`
+2. Decorate a Python function with `@ds.type_function()` (or other patterns)
+3. rdflib-endpoint registers it in RDFLib's evaluation engine
+4. Serve the dataset as a SPARQL 1.1 endpoint (using FastAPI)
+5. Incoming queries that match the pattern trigger your function
+6. Return values become SPARQL result bindings automatically
+
+Idiomatic python: type annotations and dataclasses handle all the IRI and binding mapping.
 
 ---
 
@@ -128,7 +147,7 @@ def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
                 func:result ?result ;
                 func:score ?score .
         }
-        ```
+        \```
     """
     return [SearchResult(result=URIRef(r.id), score=r.score)
             for r in engine.search(smiles, limit=limit)]
@@ -168,7 +187,7 @@ def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
                 func:result ?result ;
                 func:score ?score .
         }
-        ```
+```
     """
     return [SearchResult(result=URIRef(r.id), score=r.score)
             for r in engine.search(smiles, limit=limit)]
@@ -181,6 +200,11 @@ def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
 The function fires when its IRI appears as a predicate. The subject is the input, the return value is the object.
 
 ```python
+import bioregistry
+from rdflib import OWL, URIRef
+
+conv = bioregistry.get_converter()
+
 @ds.predicate_function(namespace=OWL._NS)
 def same_as(input_iri: URIRef) -> list[URIRef]:
     """Return all equivalent IRIs via Bioregistry."""
@@ -222,6 +246,40 @@ SELECT ?input ?part ?partIndex WHERE {
 
 `?part` gets `SplitResult.value`, `?partIndex` gets `SplitResult.index` -- variable names derived from dataclass field names.
 
+> Additional variables work like labels on Wikidata label service: concatenate to the bound `?variable`
+
+---
+
+## `@graph_function`: populate a temporary graph
+
+New special concept!
+
+---
+
+## Serving the endpoint
+
+One line to deploy as a standalone app:
+
+```python
+from rdflib_endpoint import SparqlEndpoint
+
+app = SparqlEndpoint(graph=ds, title="My SPARQL Service")
+```
+
+Run:
+
+```sh
+uvicorn main:app --reload
+```
+
+Or mount as a router inside an existing FastAPI/Flask/Django app:
+
+```python
+app.include_router(SparqlRouter(graph=ds, path="/sparql"))
+```
+
+SPARQL query examples embedded in docstrings are surfaced automatically as YASGUI tabs.
+
 ---
 
 ## Implementation: chemistry search
@@ -245,7 +303,7 @@ Because the endpoint speaks standard SPARQL 1.1, any other endpoint can delegate
 PREFIX func: <urn:sparql-function:>
 SELECT ?compound ?score WHERE {
     ?compound a <http://rdf.rhea-db.org/Compound> .
-    SERVICE <http://mol-search.sib.swiss/sparql> {
+    SERVICE <https://biosoda.unil.ch/mol-search/sparql> {
         [] a func:SimilaritySearch ;
            func:smiles "c1ccccc1" ;
            func:result ?compound ;
@@ -256,32 +314,6 @@ SELECT ?compound ?score WHERE {
 ```
 
 Graph traversal stays in Rhea. Computation runs in the microservice. No data movement.
-
----
-
-## Serving the endpoint
-
-One line to deploy as a standalone app:
-
-```python
-from rdflib_endpoint import SparqlEndpoint
-
-app = SparqlEndpoint(graph=ds, title="My SPARQL Service")
-```
-
-Run:
-
-```sh
-uvicorn main:app --reload
-```
-
-Or mount as a router inside an existing FastAPI app:
-
-```python
-app.include_router(SparqlRouter(graph=ds, path="/sparql"))
-```
-
-SPARQL query examples embedded in docstrings are surfaced automatically as YASGUI tabs.
 
 ---
 
@@ -315,6 +347,7 @@ LLMs can read the schema resource and write correct SPARQL queries against the s
 
 - RDFLib uses a **global** custom evaluation registry: two `DatasetExt` instances in the same process share functions
 - Custom function not supported for Oxigraph backend (possible)
+- We force "conventions": python in snake_case, SPARQL in camelCase and PascalCase
 - Performance: python-level evaluation per query, no query-planning awareness
 
 ---
