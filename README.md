@@ -40,11 +40,11 @@ mol-search-sparql-service -f compounds.tsv
 
 > [!NOTE]
 >
-> The input TSV file should contain at least:
+> The input TSV file is processed by column order (headers are optional and automatically skipped):
 >
-> -   `?chem`: IRI of the chemical
-> -   `?smiles`: SMILES string
-> -   `?db`: optional database source URI
+> 1.  **chem IRI**: IRI of the chemical (e.g., `<http://...>` or a raw URL).
+> 2.  **SMILES**: SMILES string.
+> 3.  **db**: (Optional) Database source name or URI.
 
 Alternatively, you can dynamically fetch the compounds data on startup using a SPARQL query against a remote endpoint:
 

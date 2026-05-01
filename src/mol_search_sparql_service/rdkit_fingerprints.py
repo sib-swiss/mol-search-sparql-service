@@ -525,42 +525,108 @@ class MolSearchEngine:
             resp = requests.post(
                 endpoint,
                 data={"query": query},
-                headers={"Accept": "text/tab-separated-values"},
+                headers={"Accept": "application/sparql-results+json"},
             )
             resp.raise_for_status()
+            data = resp.json()
         except Exception as e:
             raise RuntimeError(f"Failed to fetch data from SPARQL endpoint: {e}") from e
 
+        # Convert SPARQL JSON to TSV for local storage (to support multi-worker reload)
         fd, temp_path = tempfile.mkstemp(suffix=".tsv")
-        with os.fdopen(fd, "wb") as f:
-            f.write(resp.content)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            writer = csv.writer(f, delimiter="\t")
+            # Write header
+            vars = data.get("head", {}).get("vars", [])
+            writer.writerow([f"?{v}" for v in vars])
+            
+            # Write rows
+            for binding in data.get("results", {}).get("bindings", []):
+                row = []
+                for v in vars:
+                    val = binding.get(v, {}).get("value", "")
+                    # Wrap URI in <> for consistency with IRI regex
+                    if binding.get(v, {}).get("type") == "uri":
+                        val = f"<{val}>"
+                    row.append(val)
+                writer.writerow(row)
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
         self.load_file(temp_path)
 
     def load_file(self, compounds_file: str) -> None:
+        """
+        Load compounds from a TSV file.
+        Format (by column order):
+        1. chem IRI (e.g. <http://...>)
+        2. SMILES string
+        3. db name (optional)
+        """
+        import re
+
+        # Regex for basic validation
+        # IRI: wrapped in <> or starting with http
+        iri_regex = re.compile(r"^<[^>]+>$|^https?://[^\s]+$")
+        # SMILES: basic characters found in SMILES (including % for large rings)
+        smiles_regex = re.compile(r"^[A-Za-z0-9@#\-\[\]\(\)\\\/=\+\.\*%]+$")
+
         # Persist the path so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
         print(f"Reading compounds from {compounds_file}...")
         compounds: list[CompoundEntry] = []
+
         with open(compounds_file, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f, delimiter="\t")
-            for row in reader:
-                # New format: ?db, ?chem, ?smiles
+            reader = csv.reader(f, delimiter="\t")
+            
+            # Peek at first row to detect header
+            try:
+                first_row = next(reader)
+            except StopIteration:
+                return
+
+            # Header detection: if first col starts with '?' or doesn't look like an IRI
+            is_header = False
+            if first_row and (first_row[0].startswith("?") or not iri_regex.match(first_row[0])):
+                is_header = True
+                print(f"  - Header detected and skipped: {first_row}")
+            
+            # Process rows
+            current_row = first_row if not is_header else None
+            
+            while True:
+                if current_row:
+                    row = current_row
+                    current_row = None
+                else:
+                    try:
+                        row = next(reader)
+                    except StopIteration:
+                        break
+
+                if len(row) < 2:
+                    print(f"  - Warning: Skipping row {reader.line_num} due to insufficient columns (found {len(row)}, expected at least 2)")
+                    continue
+
                 try:
-                    # Extract ID from ?chem (<URI>)
-                    cid = row.get("?chem", "").strip("<>")
-                    if not cid:
+                    # 1. chem IRI
+                    cid_raw = row[0].strip()
+                    # 2. SMILES
+                    smiles_raw = row[1].strip().strip('"')
+                    # 3. db (optional)
+                    db_raw = row[2].strip().strip("<>") if len(row) > 2 else "unknown"
+
+                    # Validate with regex
+                    if not iri_regex.match(cid_raw):
+                        print(f"  - Warning: Skipping row {reader.line_num} due to invalid IRI format: {cid_raw}")
+                        continue
+                    
+                    if not smiles_regex.match(smiles_raw):
+                        print(f"  - Warning: Skipping row {reader.line_num} for {cid_raw} due to invalid SMILES format: {smiles_raw}")
                         continue
 
-                    # Extract SMILES from ?smiles ("SMILES")
-                    smiles = row.get("?smiles", "").strip('"')
-
-                    # Extract DB from ?db (<URI>)
-                    db = row.get("?db", "").strip("<>") if "?db" in row else "unknown"
-
-                    compounds.append(CompoundEntry(id=cid, smiles=smiles, db_name=db))
+                    cid = cid_raw.strip("<>")
+                    compounds.append(CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw))
                 except Exception:
                     continue
 
