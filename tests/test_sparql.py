@@ -9,7 +9,7 @@ import uvicorn
 from mol_search_sparql_service.rdkit_fingerprints import engine
 from mol_search_sparql_service.sparql_service import app
 
-PORT = 8000
+PORT = 8011
 URL = f"http://localhost:{PORT}/sparql"
 
 
