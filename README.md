@@ -11,7 +11,7 @@ Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https:
   ```sparql
   PREFIX func: <urn:sparql-function:>
   SELECT ?result ?score WHERE {
-    SERVICE <http://localhost:8000/sparql> {
+    SERVICE <http://localhost:8010/sparql> {
       [] a func:SimilaritySearch ;
          func:smiles "c1ccccc1" ;
          func:result ?result ;
