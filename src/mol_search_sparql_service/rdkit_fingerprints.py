@@ -326,11 +326,6 @@ def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
     if mol is None:
         return None
 
-    problems = Chem.DetectChemistryProblems(mol)
-    if problems:
-        for p in problems:
-            print(f"{cid}\terror\t{p.GetType()}: {p.Message()}")
-
     try:
         Chem.SanitizeMol(
             mol,
@@ -630,13 +625,21 @@ class MolSearchEngine:
                 except Exception:
                     continue
 
+        # Pre-parse molecules once for all fingerprint types
+        print(f"Parsing {len(compounds)} molecules...")
+        valid_mols: list[tuple[CompoundEntry, Chem.Mol]] = []
+        for entry in compounds:
+            mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
+            if mol:
+                valid_mols.append((entry, mol))
+
         # Compile In-Memory
-        print(f"Compiling fingerprints dynamically ({len(compounds)} compounds)...")
+        print(f"Compiling fingerprints dynamically ({len(valid_mols)} compounds)...")
 
         for fp_name in FINGERPRINTS.keys():
             print(f"  - Compiling {fp_name}...")
             try:
-                data = compile_fingerprints_in_memory(compounds, fp_name)
+                data = compile_fingerprints_in_memory(valid_mols, fp_name)
                 self.add_data(data, fp_name)
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
@@ -645,16 +648,17 @@ class MolSearchEngine:
 
 
 def compile_fingerprints_in_memory(
-    compounds: list[CompoundEntry], fp_type: str
+    valid_mols: list[tuple[CompoundEntry, Chem.Mol]], fp_type: str
 ) -> list[CompoundEntry]:
-    """Compiles fingerprints for a list of `CompoundEntry` objects in-memory without writing to disk."""
+    """Compiles fingerprints for a list of (CompoundEntry, Mol) pairs in-memory."""
     data: list[CompoundEntry] = []
-    for entry in compounds:
-        mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
-        if mol:
+    for entry, mol in valid_mols:
+        try:
             fp = get_fingerprint(mol, fp_type)
             # Create a new entry with the fingerprint attached
             data.append(replace(entry, fp=fp))
+        except Exception as e:
+            print(f"  - Warning: Failed to compute {fp_type} for {entry.id}: {e}")
     return data
 
 
