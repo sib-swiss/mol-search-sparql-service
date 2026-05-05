@@ -57,7 +57,6 @@ Write a Python function. Get a working SPARQL endpoint. No triplestore plugins, 
 from rdflib_endpoint import DatasetExt
 
 ds = DatasetExt()
-
 @dataclass
 class SearchResult:
     result: URIRef
@@ -68,8 +67,6 @@ def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
     results = engine.search(smiles, limit=limit)
     return [SearchResult(result=URIRef(r.id), score=r.score) for r in results]
 ```
-
-Queryable immediately:
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
