@@ -1,6 +1,6 @@
 ## Extending SPARQL with Python
 
-**Make Python functions queryable in a SPARQL endpoint**
+***A virtual KG over anything in 5 lines of python***
 
 Marco Pagni, Vincent Emonet · RDF Focus Group
 
@@ -16,7 +16,7 @@ But knowledge graphs are not just data, they are increasingly paired with comput
 - NLP: named entity recognition, embedding similarity
 - ML inference: scoring, classification, ranking
 
-Python is one of the most popular solution for in research and data libraries
+Python is one of the most popular solution for research and data libraries
 
 
 > **SPARQL has no native way to run arbitrary computation.**
@@ -27,9 +27,9 @@ Python is one of the most popular solution for in research and data libraries
 
 ## What are our options today?
 
-**1. SPARQL extension functions**: most triplestores support `BIND(ext:myFunc(...) AS ?x)`, but registration is store-specific, requires deep internals knowledge, and admin control over the endpoint.
+**1. Post-processing**: fetch all results, compute in Python, lose the ability to filter or join server-side. Pulls too much data.
 
-**2. Post-processing**: fetch all results, compute in Python, lose the ability to filter or join server-side. Pulls too much data.
+**2. SPARQL extension functions**: many triplestores support `BIND(ext:myFunc(...) AS ?x)`, but implementation and registration is store-specific, requires deep internals knowledge.
 
 **3. Federated `SERVICE` endpoint**: seems the right architecture, but building a SPARQL-compliant HTTP server from scratch is a lot of plumbing.
 
@@ -38,12 +38,10 @@ Python is one of the most popular solution for in research and data libraries
 ## Inspirations
 
 - Goes back 10 years ago with Jerven's identifiers.org custom java service
-- FastAPI for the API design and dev experience
+- FastAPI for the API design and plebiscited dev experience
 - RDFLib for RDF in python
 
 Extending an existing known library: `rdflib-endpoint` (by Vincent)
-
-RDFLib is a RDF python library with everything needed to do most RDF task (e.g. SPARQL query engine)
 
 RDFLib-endpoint enables to easily deploy graph built with RDFLib
 
@@ -53,7 +51,7 @@ Already used by projects like [bioregistry.io/sparql](https://bioregistry.io/spa
 
 ## The goal
 
-Write a Python function. Get a working SPARQL endpoint. No triplestore plugins, no RDF parsing, no boilerplate.
+Write a Python function. Get a working SPARQL endpoint. No triplestore plugins, no RDF parsing, minimal boilerplate.
 
 ```python
 from rdflib_endpoint import DatasetExt
@@ -85,7 +83,7 @@ SELECT ?compound ?score WHERE {
 
 ---
 
-## `DatasetExt`: 4 decorator patterns
+## `DatasetExt` · 4 decorator patterns
 
 `rdflib-endpoint` extends RDFLib's `Dataset` with decorator helpers, covering most custom evaluation use-cases observed in the wild:
 
@@ -117,7 +115,7 @@ Idiomatic python: type annotations and dataclasses handle all the IRI and bindin
 
 ---
 
-## `@type_function`: rich triple pattern
+## `@type_function` · rich triple pattern
 
 The most expressive pattern. Inputs and outputs are predicates in the triple pattern.
 
@@ -149,53 +147,19 @@ def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
         }
         \```
     """
-    return [SearchResult(result=URIRef(r.id), score=r.score)
-            for r in engine.search(smiles, limit=limit)]
+    return [
+        SearchResult(result=URIRef(r.id), score=r.score)
+        for r in engine.search(smiles, limit=limit)
+    ]
 ```
 
 Each field in the dataclass becomes a SPARQL predicate automatically.
 
 Proper docstring help generating better docs and populate Yasgui tabs automatically.
 
-----
-
-
-
-```python
-@dataclass
-class SearchResult:
-    result: URIRef
-    """The URI of the matching compound."""
-    score: float
-    """Tanimoto similarity score (0-1)."""
-
-@ds.type_function()
-def similarity_search(smiles: str, limit: int = 10) -> list[SearchResult]:
-    """Similarity search over precomputed fingerprints.
-    
-    Args:
-        smiles: Query SMILES string.
-        limit: Maximum number of results to return.
-
-    Example:
-        ```sparql
-        PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?score WHERE {
-            [] a func:SimilaritySearch ;
-                func:smiles "[NH3+][C@@H](Cc1ccccc1)C(=O)[O-]" ;
-                func:limit 3 ;
-                func:result ?result ;
-                func:score ?score .
-        }
-```
-    """
-    return [SearchResult(result=URIRef(r.id), score=r.score)
-            for r in engine.search(smiles, limit=limit)]
-```
-
 ---
 
-## `@predicate_function`: looks like a triple
+## `@predicate_function` · looks like a triple
 
 The function fires when its IRI appears as a predicate. The subject is the input, the return value is the object.
 
@@ -218,11 +182,11 @@ SELECT ?sameAs WHERE {
 }
 ```
 
-Looks like ordinary triple resolution -- no `BIND`, no `SERVICE` wrapper needed.
+Looks like ordinary triple resolution: no `BIND`, no `SERVICE` wrapper needed.
 
 ---
 
-## `@extension_function`: classic SPARQL extension
+## `@extension_function` · classic SPARQL extension
 
 The familiar `BIND(func:name(...) AS ?var)` pattern. Return a list to emit multiple rows, use a dataclass to populate multiple variables.
 
@@ -250,9 +214,29 @@ SELECT ?input ?part ?partIndex WHERE {
 
 ---
 
-## `@graph_function`: populate a temporary graph
+## `@graph_function` · populate a temporary graph
 
-New special concept!
+A function that populate and returns a temporary graph
+
+```python
+@ds.graph_function()
+def split_graph(input_str: str, separator: str = ",") -> Graph:
+    g = Graph()
+    for part in input_str.split(separator):
+        g.add((URIRef("http://splitted"), URIRef["http://part"], Literal(part)))
+    return g
+```
+
+```SPARQL
+PREFIX func: <urn:sparql-function:>
+SELECT DISTINCT * WHERE {
+    VALUES ?input { "hello world" "cheese is good" }
+    BIND(func:splitGraph(?input, " ") AS ?g)
+    GRAPH ?g {
+        ?s ?p ?o .
+    }
+}
+```
 
 ---
 
@@ -313,22 +297,18 @@ SELECT ?compound ?score WHERE {
 }
 ```
 
-Graph traversal stays in Rhea. Computation runs in the microservice. No data movement.
+Graph traversal stays in Rhea. Computation runs in the microservice.
 
 ---
 
 ## Auto-generated docs and MCP
 
-Google-style docstrings power both the README and an MCP resource:
+Google-style docstrings power both the [README "Functions" section](https://github.com/sib-swiss/mol-search-sparql-service#-functions) and an MCP resource:
 
 ```python
 @mcp.resource("sparql://schema")
 def sparql_schema() -> str:
     return ds.generate_docs()  # Markdown table: predicates, types, defaults
-
-@mcp.prompt()
-def sparql_assistant() -> str:
-    return f"You are an expert in writing SPARQL queries...\n\n{ds.generate_docs()}"
 ```
 
 LLMs can read the schema resource and write correct SPARQL queries against the service.
@@ -340,12 +320,12 @@ LLMs can read the schema resource and write correct SPARQL queries against the s
 **What works well:**
 
 - Pure Python: no RDF or SPARQL parsing for the implementer, type annotations and dataclasses drive all IRI and binding mapping, python defaults handle optional SPARQL inputs
-- Works with federated `SERVICE` out of the box
-- Enable building flexible Virtual Knowledge Graphs in a few lines of python
+- Works with federated `SERVICE` out of the box, with test for federated queries from all available triplestores
+- Enable building flexible Virtual Knowledge Graphs in a few lines of python, without the limitations of a mapping language like R2RML
 
 **Current limitations:**
 
-- RDFLib uses a **global** custom evaluation registry: two `DatasetExt` instances in the same process share functions
+- RDFLib uses a global custom evaluation registry: two `DatasetExt` instances in the same process share functions
 - Custom function not supported for Oxigraph backend (possible)
 - We force "conventions": python in snake_case, SPARQL in camelCase and PascalCase
 - Performance: python-level evaluation per query, no query-planning awareness
