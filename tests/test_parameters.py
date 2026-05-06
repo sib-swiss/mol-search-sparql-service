@@ -52,18 +52,10 @@ def test_similarity_search_parameters(fp_type, use_chirality, limit, min_score):
         assert hasattr(r.compound, "smiles")
         
         # Specific value validation for identical molecule
-        # NOTE: We only expect 1.0 if use_chirality matches the database (which is False)
+        # Since the engine now automatically builds chiral datasets,
+        # querying the identical molecule should yield ~1.0 regardless of the use_chirality flag.
         if r.compound.smiles == query_smiles:
-            if not use_chirality:
-                assert r.similarity == pytest.approx(1.0, rel=1e-5)
-            else:
-                # If chirality is enabled for query but not database, score will be < 1.0
-                # BUT only for fingerprint types that actually use the chirality flag (Morgan)
-                if fp_type in ["morgan_ecfp", "morgan_fcfp"]:
-                    assert r.similarity < 1.0
-                else:
-                    # Others don't use the flag, so they still match 1.0
-                    assert r.similarity == pytest.approx(1.0, rel=1e-5)
+            assert r.similarity == pytest.approx(1.0, rel=1e-5)
 
 # Test specific known similarity values
 def test_specific_similarity_values():

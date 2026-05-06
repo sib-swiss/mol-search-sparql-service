@@ -56,7 +56,7 @@ Other available optional flags include:
 - `-p`, `--port`: Port to run the server on (default: `8010`).
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
-- `--use-chirality`: Build the fingerprint database with chirality enabled. Recommended if you plan to use `func:useChirality true` in your SPARQL queries for Morgan fingerprints.
+
 
 <!-- AUTOGEN_DOCS_START -->
 

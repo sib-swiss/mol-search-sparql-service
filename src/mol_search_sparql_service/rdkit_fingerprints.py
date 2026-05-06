@@ -401,11 +401,14 @@ class MolSearchEngine:
         use_chirality: bool = False,
         min_score: float = 0.0,
     ) -> list[SimilarityResult]:
-        """Executes a similarity search."""
-        if fp_type not in self.datasets:
-            raise ValueError(f"Error: Dataset {fp_type} not loaded.")
+        """Executes a similarity search and returns the top hits."""
+        # Attempt to use chiral dataset if requested and available
+        target_fp_type = f"{fp_type}_chiral" if use_chirality and f"{fp_type}_chiral" in self.datasets else fp_type
 
-        dataset = self.datasets[fp_type]
+        if target_fp_type not in self.datasets:
+            raise ValueError(f"Error: Dataset {target_fp_type} not loaded.")
+
+        dataset = self.datasets[target_fp_type]
 
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
@@ -414,8 +417,8 @@ class MolSearchEngine:
 
         query_fp = get_fingerprint(query_mol, fp_type, stereo=use_chirality)
 
-        # Get indices to search
-        indices = self._get_indices(fp_type, db_names)
+        # Get candidate indices
+        indices = self._get_indices(target_fp_type, db_names)
 
         # Retrieve FPs for the target indices
         if not db_names:
@@ -451,20 +454,23 @@ class MolSearchEngine:
         min_match_count: int = 1,
     ) -> list[SubstructureResult]:
         """Executes a substructure search (Screening + Verification)."""
-        if fp_type not in self.datasets:
-            raise ValueError(f"Error: Dataset {fp_type} not loaded.")
+        # Attempt to use chiral dataset if requested and available
+        target_fp_type = f"{fp_type}_chiral" if use_chirality and f"{fp_type}_chiral" in self.datasets else fp_type
 
-        dataset = self.datasets[fp_type]
+        if target_fp_type not in self.datasets:
+            raise ValueError(f"Error: Dataset {target_fp_type} not loaded.")
+
+        dataset = self.datasets[target_fp_type]
 
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
 
-        query_fp = get_fingerprint(query_mol, fp_type)
+        query_fp = get_fingerprint(query_mol, fp_type, stereo=use_chirality)
 
         # Get candidate indices
-        indices = self._get_indices(fp_type, db_names)
+        indices = self._get_indices(target_fp_type, db_names)
 
         candidates_data: list[CompoundEntry] = []
 
@@ -506,9 +512,7 @@ class MolSearchEngine:
                 continue
         return results
 
-    def load_from_sparql(
-        self, endpoint: str, query: str, use_chirality: bool = False
-    ) -> None:
+    def load_from_sparql(self, endpoint: str, query: str) -> None:
         """
         Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
         and load it into the engine. The temp file path is stored in the
@@ -550,9 +554,9 @@ class MolSearchEngine:
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
-        self.load_file(temp_path, use_chirality=use_chirality)
+        self.load_file(temp_path)
 
-    def load_file(self, compounds_file: str, use_chirality: bool = False) -> None:
+    def load_file(self, compounds_file: str) -> None:
         """
         Load compounds from a TSV file.
         Format (by column order):
@@ -568,10 +572,9 @@ class MolSearchEngine:
         # SMILES: basic characters found in SMILES (including % for large rings)
         smiles_regex = re.compile(r"^[A-Za-z0-9@#\-\[\]\(\)\\\/=\+\.\*%]+$")
 
-        # Persist the path and chirality setting so that additional Uvicorn workers can pick it up
+        # Persist the path so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
-        os.environ["USE_CHIRALITY"] = "1" if use_chirality else "0"
-        print(f"Reading compounds from {compounds_file} (use_chirality={use_chirality})...")
+        print(f"Reading compounds from {compounds_file}...")
         compounds: list[CompoundEntry] = []
 
         with open(compounds_file, "r", encoding="utf-8") as f:
@@ -639,13 +642,21 @@ class MolSearchEngine:
         # Compile In-Memory
         print(f"Compiling fingerprints dynamically ({len(valid_mols)} compounds)...")
 
-        for fp_name in FINGERPRINTS.keys():
+        for fp_name, cfg in FINGERPRINTS.items():
             print(f"  - Compiling {fp_name}...")
             try:
                 data = compile_fingerprints_in_memory(
-                    valid_mols, fp_name, use_chirality=use_chirality
+                    valid_mols, fp_name, use_chirality=False
                 )
                 self.add_data(data, fp_name)
+
+                # If the fingerprint supports chirality, build a chiral version as well
+                if cfg.stereo_options:
+                    print(f"  - Compiling {fp_name}_chiral...")
+                    data_chiral = compile_fingerprints_in_memory(
+                        valid_mols, fp_name, use_chirality=True
+                    )
+                    self.add_data(data_chiral, f"{fp_name}_chiral")
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
 

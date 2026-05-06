@@ -33,11 +33,6 @@ def main() -> None:
     parser.add_argument(
         "-d", "--daemon", action="store_true", help="Daemonize the server process"
     )
-    parser.add_argument(
-        "--use-chirality",
-        action="store_true",
-        help="Build database fingerprints with chirality enabled",
-    )
     args = parser.parse_args()
 
     if args.sparql and not args.endpoint:
@@ -45,13 +40,11 @@ def main() -> None:
 
     # 1. Load Data
     if args.file:
-        engine.load_file(args.file, use_chirality=args.use_chirality)
+        engine.load_file(args.file)
     else:
         with open(args.sparql, "r") as f:
             query = f.read()
-        engine.load_from_sparql(
-            args.endpoint, query, use_chirality=args.use_chirality
-        )
+        engine.load_from_sparql(args.endpoint, query)
 
     # Daemonize if requested
     if args.daemon:
