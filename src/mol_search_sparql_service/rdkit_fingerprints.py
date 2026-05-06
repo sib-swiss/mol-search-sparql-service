@@ -506,7 +506,9 @@ class MolSearchEngine:
                 continue
         return results
 
-    def load_from_sparql(self, endpoint: str, query: str) -> None:
+    def load_from_sparql(
+        self, endpoint: str, query: str, use_chirality: bool = False
+    ) -> None:
         """
         Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
         and load it into the engine. The temp file path is stored in the
@@ -548,9 +550,9 @@ class MolSearchEngine:
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
-        self.load_file(temp_path)
+        self.load_file(temp_path, use_chirality=use_chirality)
 
-    def load_file(self, compounds_file: str) -> None:
+    def load_file(self, compounds_file: str, use_chirality: bool = False) -> None:
         """
         Load compounds from a TSV file.
         Format (by column order):
@@ -566,9 +568,10 @@ class MolSearchEngine:
         # SMILES: basic characters found in SMILES (including % for large rings)
         smiles_regex = re.compile(r"^[A-Za-z0-9@#\-\[\]\(\)\\\/=\+\.\*%]+$")
 
-        # Persist the path so that additional Uvicorn workers can pick it up
+        # Persist the path and chirality setting so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
-        print(f"Reading compounds from {compounds_file}...")
+        os.environ["USE_CHIRALITY"] = "1" if use_chirality else "0"
+        print(f"Reading compounds from {compounds_file} (use_chirality={use_chirality})...")
         compounds: list[CompoundEntry] = []
 
         with open(compounds_file, "r", encoding="utf-8") as f:
@@ -639,7 +642,9 @@ class MolSearchEngine:
         for fp_name in FINGERPRINTS.keys():
             print(f"  - Compiling {fp_name}...")
             try:
-                data = compile_fingerprints_in_memory(valid_mols, fp_name)
+                data = compile_fingerprints_in_memory(
+                    valid_mols, fp_name, use_chirality=use_chirality
+                )
                 self.add_data(data, fp_name)
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
@@ -648,13 +653,15 @@ class MolSearchEngine:
 
 
 def compile_fingerprints_in_memory(
-    valid_mols: list[tuple[CompoundEntry, Chem.Mol]], fp_type: str
+    valid_mols: list[tuple[CompoundEntry, Chem.Mol]],
+    fp_type: str,
+    use_chirality: bool = False,
 ) -> list[CompoundEntry]:
     """Compiles fingerprints for a list of (CompoundEntry, Mol) pairs in-memory."""
     data: list[CompoundEntry] = []
     for entry, mol in valid_mols:
         try:
-            fp = get_fingerprint(mol, fp_type)
+            fp = get_fingerprint(mol, fp_type, stereo=use_chirality)
             # Create a new entry with the fingerprint attached
             data.append(replace(entry, fp=fp))
         except Exception as e:

@@ -228,10 +228,13 @@ The SPARQL endpoint accepts `HTTP GET` and `HTTP POST`, typically at `/sparql` o
 async def lifespan(app: FastAPI):
     # Startup: load the compounds file into the engine if needed (multi-worker case)
     compounds_file = os.environ.get("COMPOUNDS_FILE")
+    use_chirality = os.environ.get("USE_CHIRALITY") == "1"
     if compounds_file and not engine.datasets:
-        print(f"Initializing engine from: {compounds_file}")
+        print(
+            f"Initializing engine from: {compounds_file} (use_chirality={use_chirality})"
+        )
         try:
-            engine.load_file(compounds_file)
+            engine.load_file(compounds_file, use_chirality=use_chirality)
         except Exception as e:
             print(f"Error loading compounds file on startup: {e}")
     yield
