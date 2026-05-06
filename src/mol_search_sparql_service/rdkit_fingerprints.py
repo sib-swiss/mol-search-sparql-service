@@ -634,9 +634,8 @@ class MolSearchEngine:
                 # Defer SMILES validation to RDKit
                 mol = safe_mol_from_smiles(smiles_raw, cid=cid)
                 if mol is None:
-                    raise ValueError(
-                        f"RDKit failed to parse SMILES on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'"
-                    )
+                    print(f"  - Warning: RDKit failed to parse SMILES on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'. Skipping.")
+                    continue
 
                 valid_mols.append((entry, mol))
 

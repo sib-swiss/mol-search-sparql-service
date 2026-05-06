@@ -40,10 +40,10 @@ mol-search-sparql-service -f compounds.tsv
 
 > [!IMPORTANT]
 >
-> The input TSV file is processed strictly by column order (headers are automatically detected and skipped). The engine will **stop and raise an error** if any row is malformed.
+> The input TSV file is processed strictly by column order (headers are automatically detected and skipped). The engine will **stop and raise an error** if any row is structurally malformed (e.g. missing columns or invalid IRI syntax).
 >
 > 1.  **chem IRI**: IRI of the chemical. Must be explicitly wrapped in angle brackets (e.g., `<http://...>`, `<urn:...>`) or start with `http(s)://`.
-> 2.  **SMILES**: SMILES string. Must be successfully parseable into a valid molecule by RDKit.
+> 2.  **SMILES**: SMILES string. If RDKit fails to parse the string into a valid molecule, the engine will **issue a warning and skip the row**.
 > 3.  **db**: (Optional) Database source name. **Note on URIs vs Literals:** The engine preserves the exact string formatting provided. To specify a URI for accurate SPARQL matching later, you *must* wrap it in angle brackets (e.g., `<http://rhea>`). Otherwise, `Rhea` will be treated as a literal string.
 
 Alternatively, you can dynamically fetch the compounds data on startup using a SPARQL query against a remote endpoint:
