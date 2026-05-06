@@ -619,7 +619,8 @@ class MolSearchEngine:
                     # 2. SMILES
                     smiles_raw = row[1].strip().strip('"')
                     # 3. db (optional)
-                    db_raw = row[2].strip().strip("<>") if len(row) > 2 else "unknown"
+                    # We do NOT strip("<>") here to preserve the distinction between URIs and literals.
+                    db_raw = row[2].strip() if len(row) > 2 else "unknown"
 
                     # Validate with regex
                     if not iri_regex.match(cid_raw):
