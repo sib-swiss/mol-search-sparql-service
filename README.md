@@ -90,6 +90,29 @@ SELECT ?fpType ?description ?shortName WHERE {
 ```
 
 
+### `func:ListDatabases`
+
+List available database names loaded in the service.
+
+**IRI:** `urn:sparql-function:ListDatabases`
+
+**Outputs:**
+
+| Predicate | Type | Description |
+|----------------------|------|-------------|
+| `func:dbName` | `str` | The name or URI of the database stored in the service. |
+
+**Example:**
+
+```sparql
+PREFIX func: <urn:sparql-function:>
+SELECT ?dbName WHERE {
+    [] a func:ListDatabases ;
+        func:dbName ?dbName .
+}
+```
+
+
 ### `func:SimilaritySearch`
 
 Perform similarity search using precomputed fingerprints.

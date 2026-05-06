@@ -106,3 +106,8 @@ def test_invalid_parameters():
     # Invalid SMILES should return empty list (graceful failure)
     results = engine.search_similarity("INVALID_SMILES")
     assert results == []
+
+def test_get_databases():
+    dbs = engine.get_databases()
+    assert set(dbs) == {"db1", "db2"}
+

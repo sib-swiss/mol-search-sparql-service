@@ -406,6 +406,14 @@ class MolSearchEngine:
                 indices.extend(dataset.db_indices[db])
         return indices
 
+    def get_databases(self) -> list[str]:
+        """Return a list of all database names present in the engine."""
+        if not self.datasets:
+            return []
+        # All datasets share the same underlying data rows, so we can just use the first one
+        first_dataset = next(iter(self.datasets.values()))
+        return list(first_dataset.db_indices.keys())
+
     def search_similarity(
         self,
         query_smiles: str,

@@ -41,6 +41,12 @@ class FingerprintInfo:
     """Short display name for the fingerprint (e.g. ECFP, MACCS)."""
 
 
+@dataclass
+class DatabaseInfo:
+    dbName: str
+    """The name or URI of the database stored in the service."""
+
+
 # Initialize DatasetExt
 g = DatasetExt()
 g.bind("func", FUNC)
@@ -79,6 +85,22 @@ def list_fingerprints() -> list[FingerprintInfo]:
         )
         for key, val in FINGERPRINTS.items()
     ]
+
+
+@g.type_function()
+def list_databases() -> list[DatabaseInfo]:
+    """List available database names loaded in the service.
+
+    Example:
+        ```sparql
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?dbName WHERE {
+            [] a func:ListDatabases ;
+                func:dbName ?dbName .
+        }
+        ```
+    """
+    return [DatabaseInfo(dbName=db) for db in engine.get_databases()]
 
 
 @g.type_function()
