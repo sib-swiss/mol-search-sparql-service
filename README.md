@@ -166,14 +166,14 @@ SELECT ?result ?matchCount WHERE {
 | Key | Short Name | Description |
 |-----|------------|-------------|
 | `morgan_ecfp` | ECFP | Extended Connectivity Fingerprint (ECFP). Encodes atom-centered circular environments up to a given radius. Widely used for similarity search, clustering, and QSAR. |
+| `morgan_ecfp_chiral` | ECFP_C | Extended Connectivity Fingerprint (ECFP). Encodes atom-centered circular environments up to a given radius. Widely used for similarity search, clustering, and QSAR. (Computed with stereochemistry enabled). |
 | `morgan_fcfp` | FCFP | Functional-Class Fingerprint (FCFP). Morgan fingerprint using pharmacophoric atom features instead of exact atom types. |
+| `morgan_fcfp_chiral` | FCFP_C | Functional-Class Fingerprint (FCFP). Morgan fingerprint using pharmacophoric atom features instead of exact atom types. (Computed with stereochemistry enabled). |
 | `rdk_topological` | RDK | RDKit topological (path-based) fingerprint. Encodes linear bond paths similar to Daylight fingerprints. |
 | `atom_pair` | AP | Atom Pair fingerprint. Encodes pairs of atoms along with their topological distance. |
 | `topological_torsion` | TT | Topological Torsion fingerprint. Encodes sequences of four bonded atoms. |
 | `maccs` | MACCS | MACCS structural keys (166 bits). Each bit corresponds to a predefined chemical pattern. |
 | `pattern` | Pattern | RDKit Pattern fingerprint. Designed for substructure screening. |
-| `morgan_ecfp_chiral` | ECFP_C | Extended Connectivity Fingerprint (ECFP). Encodes atom-centered circular environments up to a given radius. Widely used for similarity search, clustering, and QSAR. (Computed with stereochemistry enabled). |
-| `morgan_fcfp_chiral` | FCFP_C | Functional-Class Fingerprint (FCFP). Morgan fingerprint using pharmacophoric atom features instead of exact atom types. (Computed with stereochemistry enabled). |
 
 <!-- AUTOGEN_DOCS_END -->
 

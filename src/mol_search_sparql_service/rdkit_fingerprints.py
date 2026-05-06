@@ -277,9 +277,10 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
     ),
 }
 
-# Dynamically expand FINGERPRINTS to include explicit chiral variants
-_chiral_variants = {}
+# Dynamically expand FINGERPRINTS to include explicit chiral variants right after their base versions
+_ordered_fps = {}
 for name, cfg in FINGERPRINTS.items():
+    _ordered_fps[name] = cfg
     if cfg.stereo_options:
         chiral_cfg = replace(
             cfg,
@@ -288,8 +289,9 @@ for name, cfg in FINGERPRINTS.items():
             stereo_options={},
             description=f"{cfg.description} (Computed with stereochemistry enabled).",
         )
-        _chiral_variants[f"{name}_chiral"] = chiral_cfg
-FINGERPRINTS.update(_chiral_variants)
+        _ordered_fps[f"{name}_chiral"] = chiral_cfg
+FINGERPRINTS.clear()
+FINGERPRINTS.update(_ordered_fps)
 
 
 # ---------------------------------------------------------------------------
