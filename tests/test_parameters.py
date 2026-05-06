@@ -29,16 +29,14 @@ def setup_engine():
 
 # Test combinations for similarity search
 @pytest.mark.parametrize("fp_type", list(FINGERPRINTS.keys()))
-@pytest.mark.parametrize("use_chirality", [True, False])
 @pytest.mark.parametrize("limit", [1, 5])
 @pytest.mark.parametrize("min_score", [0.0, 0.5])
-def test_similarity_search_parameters(fp_type, use_chirality, limit, min_score):
+def test_similarity_search_parameters(fp_type, limit, min_score):
     query_smiles = "[NH3+][C@@H](C)C(=O)[O-]" # Alanine
     results = engine.search_similarity(
         query_smiles,
         limit=limit,
         fp_type=fp_type,
-        use_chirality=use_chirality,
         min_score=min_score
     )
     
@@ -72,14 +70,12 @@ def test_specific_similarity_values():
     assert ethanol_score == pytest.approx(1.0)
 
 # Test combinations for substructure search
-@pytest.mark.parametrize("use_chirality", [True, False])
 @pytest.mark.parametrize("limit", [1, 2])
-def test_substructure_search_parameters(use_chirality, limit):
+def test_substructure_search_parameters(limit):
     query_smarts = "C" # Any carbon
     results = engine.search_substructure(
         query_smarts,
-        limit=limit,
-        use_chirality=use_chirality
+        limit=limit
     )
     
     # Validation

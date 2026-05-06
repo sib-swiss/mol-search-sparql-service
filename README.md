@@ -104,7 +104,6 @@ Perform similarity search using precomputed fingerprints.
 | `func:limit` | `int` | `10` | Maximum number of results to return. |
 | `func:dbNames` | `UnionType[str, NoneType]` | `None` | Optional database name to filter results. |
 | `func:fpType` | `str` | `'morgan_ecfp'` | Fingerprint type key to use. |
-| `func:useChirality` | `bool` | `False` | Whether to respect chirality when computing fingerprints. |
 | `func:minScore` | `float` | `0.0` | Minimum similarity score threshold (0.0 - 1.0). |
 
 **Outputs:**
@@ -141,7 +140,6 @@ Perform substructure search using a SMARTS/SMILES pattern.
 | `func:smart` | `str` | *required* | Query SMARTS or SMILES pattern to match. |
 | `func:limit` | `int` | `100` | Maximum number of results to return (default: 100). |
 | `func:dbNames` | `UnionType[str, NoneType]` | `None` | Optional database name to limit the search. |
-| `func:useChirality` | `bool` | `False` | Whether to respect chirality for matching. |
 | `func:minMatchCount` | `int` | `1` | Minimum number of substructure matches required. |
 
 **Outputs:**
@@ -174,6 +172,8 @@ SELECT ?result ?matchCount WHERE {
 | `topological_torsion` | TT | Topological Torsion fingerprint. Encodes sequences of four bonded atoms. |
 | `maccs` | MACCS | MACCS structural keys (166 bits). Each bit corresponds to a predefined chemical pattern. |
 | `pattern` | Pattern | RDKit Pattern fingerprint. Designed for substructure screening. |
+| `morgan_ecfp_chiral` | ECFP_C | Extended Connectivity Fingerprint (ECFP). Encodes atom-centered circular environments up to a given radius. Widely used for similarity search, clustering, and QSAR. (Computed with stereochemistry enabled). |
+| `morgan_fcfp_chiral` | FCFP_C | Functional-Class Fingerprint (FCFP). Morgan fingerprint using pharmacophoric atom features instead of exact atom types. (Computed with stereochemistry enabled). |
 
 <!-- AUTOGEN_DOCS_END -->
 

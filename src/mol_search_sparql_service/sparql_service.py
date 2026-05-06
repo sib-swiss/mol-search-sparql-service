@@ -87,7 +87,6 @@ def similarity_search(
     limit: int = 10,
     db_names: str | None = None,
     fp_type: str = "morgan_ecfp",
-    use_chirality: bool = False,
     min_score: float = 0.0,
 ) -> list[SearchResult]:
     """Perform similarity search using precomputed fingerprints.
@@ -97,7 +96,6 @@ def similarity_search(
         limit: Maximum number of results to return.
         db_names: Optional database name to filter results.
         fp_type: Fingerprint type key to use.
-        use_chirality: Whether to respect chirality when computing fingerprints.
         min_score: Minimum similarity score threshold (0.0 - 1.0).
 
     Example:
@@ -123,7 +121,6 @@ def similarity_search(
             limit=limit,
             db_names=db_list,
             fp_type=fp_type,
-            use_chirality=use_chirality,
             min_score=min_score,
         )
         return [
@@ -140,7 +137,6 @@ def substructure_search(
     smart: str,
     limit: int = 100,
     db_names: str | None = None,
-    use_chirality: bool = False,
     min_match_count: int = 1,
 ) -> list[SubstructureSearchResult]:
     """Perform substructure search using a SMARTS/SMILES pattern.
@@ -149,7 +145,6 @@ def substructure_search(
         smart: Query SMARTS or SMILES pattern to match.
         limit: Maximum number of results to return (default: 100).
         db_names: Optional database name to limit the search.
-        use_chirality: Whether to respect chirality for matching.
         min_match_count: Minimum number of substructure matches required.
 
     Example:
@@ -169,7 +164,6 @@ def substructure_search(
             smart,
             limit=limit,
             db_names=db_list,
-            use_chirality=use_chirality,
             min_match_count=min_match_count,
         )
         return [

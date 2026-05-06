@@ -277,6 +277,20 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
     ),
 }
 
+# Dynamically expand FINGERPRINTS to include explicit chiral variants
+_chiral_variants = {}
+for name, cfg in FINGERPRINTS.items():
+    if cfg.stereo_options:
+        chiral_cfg = replace(
+            cfg,
+            short_name=f"{cfg.short_name}_C",
+            default_options={**cfg.default_options, **cfg.stereo_options},
+            stereo_options={},
+            description=f"{cfg.description} (Computed with stereochemistry enabled).",
+        )
+        _chiral_variants[f"{name}_chiral"] = chiral_cfg
+FINGERPRINTS.update(_chiral_variants)
+
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -284,7 +298,7 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
 
 
 def get_fingerprint(
-    mol: Chem.Mol, name: str = "morgan_ecfp", stereo: bool = False
+    mol: Chem.Mol, name: str = "morgan_ecfp"
 ) -> Any:
     """Generates a fingerprint for a molecule using the specified configuration name.
 
@@ -296,18 +310,16 @@ def get_fingerprint(
 
     cfg = FINGERPRINTS[name]
     opts = cfg.default_options.copy()
-    if stereo:
-        opts.update(cfg.stereo_options)
 
     # Handle FCFP (feature invariants)
-    if name == "morgan_fcfp":
+    if name.startswith("morgan_fcfp"):
         opts["atomInvariantsGenerator"] = (
             rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
         )
 
     func: Callable[..., Any] = cfg.python_method
 
-    if name in ["morgan_ecfp", "morgan_fcfp"]:
+    if name.startswith("morgan_"):
         generator = func(**opts)
         return generator.GetFingerprint(mol)
     else:
@@ -398,27 +410,23 @@ class MolSearchEngine:
         limit: int = 5,
         db_names: list[str] | None = None,
         fp_type: str = "morgan_ecfp",
-        use_chirality: bool = False,
         min_score: float = 0.0,
     ) -> list[SimilarityResult]:
         """Executes a similarity search and returns the top hits."""
-        # Attempt to use chiral dataset if requested and available
-        target_fp_type = f"{fp_type}_chiral" if use_chirality and f"{fp_type}_chiral" in self.datasets else fp_type
+        if fp_type not in self.datasets:
+            raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
-        if target_fp_type not in self.datasets:
-            raise ValueError(f"Error: Dataset {target_fp_type} not loaded.")
-
-        dataset = self.datasets[target_fp_type]
+        dataset = self.datasets[fp_type]
 
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
 
-        query_fp = get_fingerprint(query_mol, fp_type, stereo=use_chirality)
+        query_fp = get_fingerprint(query_mol, fp_type)
 
         # Get candidate indices
-        indices = self._get_indices(target_fp_type, db_names)
+        indices = self._get_indices(fp_type, db_names)
 
         # Retrieve FPs for the target indices
         if not db_names:
@@ -448,29 +456,25 @@ class MolSearchEngine:
         self,
         query_smiles: str,
         limit: int = 5,
-        use_chirality: bool = False,
         db_names: list[str] | None = None,
         fp_type: str = "pattern",
         min_match_count: int = 1,
     ) -> list[SubstructureResult]:
         """Executes a substructure search (Screening + Verification)."""
-        # Attempt to use chiral dataset if requested and available
-        target_fp_type = f"{fp_type}_chiral" if use_chirality and f"{fp_type}_chiral" in self.datasets else fp_type
+        if fp_type not in self.datasets:
+            raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
-        if target_fp_type not in self.datasets:
-            raise ValueError(f"Error: Dataset {target_fp_type} not loaded.")
-
-        dataset = self.datasets[target_fp_type]
+        dataset = self.datasets[fp_type]
 
         query_mol = safe_mol_from_smiles(query_smiles, cid="query")
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
 
-        query_fp = get_fingerprint(query_mol, fp_type, stereo=use_chirality)
+        query_fp = get_fingerprint(query_mol, fp_type)
 
         # Get candidate indices
-        indices = self._get_indices(target_fp_type, db_names)
+        indices = self._get_indices(fp_type, db_names)
 
         candidates_data: list[CompoundEntry] = []
 
@@ -492,7 +496,7 @@ class MolSearchEngine:
                 if target_mol is None:
                     continue
                 matches = target_mol.GetSubstructMatches(
-                    query_mol, useChirality=use_chirality
+                    query_mol, useChirality=dataset.data[0].fp is not None and "chiral" in fp_type
                 )
 
                 if matches and len(matches) >= min_match_count:
@@ -645,18 +649,8 @@ class MolSearchEngine:
         for fp_name, cfg in FINGERPRINTS.items():
             print(f"  - Compiling {fp_name}...")
             try:
-                data = compile_fingerprints_in_memory(
-                    valid_mols, fp_name, use_chirality=False
-                )
+                data = compile_fingerprints_in_memory(valid_mols, fp_name)
                 self.add_data(data, fp_name)
-
-                # If the fingerprint supports chirality, build a chiral version as well
-                if cfg.stereo_options:
-                    print(f"  - Compiling {fp_name}_chiral...")
-                    data_chiral = compile_fingerprints_in_memory(
-                        valid_mols, fp_name, use_chirality=True
-                    )
-                    self.add_data(data_chiral, f"{fp_name}_chiral")
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
 
@@ -666,13 +660,12 @@ class MolSearchEngine:
 def compile_fingerprints_in_memory(
     valid_mols: list[tuple[CompoundEntry, Chem.Mol]],
     fp_type: str,
-    use_chirality: bool = False,
 ) -> list[CompoundEntry]:
     """Compiles fingerprints for a list of (CompoundEntry, Mol) pairs in-memory."""
     data: list[CompoundEntry] = []
     for entry, mol in valid_mols:
         try:
-            fp = get_fingerprint(mol, fp_type, stereo=use_chirality)
+            fp = get_fingerprint(mol, fp_type)
             # Create a new entry with the fingerprint attached
             data.append(replace(entry, fp=fp))
         except Exception as e:
