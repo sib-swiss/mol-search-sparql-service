@@ -38,13 +38,13 @@ Start the service by pointing it to a compounds data file (TSV):
 mol-search-sparql-service -f compounds.tsv
 ```
 
-> [!NOTE]
+> [!IMPORTANT]
 >
-> The input TSV file is processed by column order (headers are optional and automatically skipped):
+> The input TSV file is processed strictly by column order (headers are automatically detected and skipped). The engine will **stop and raise an error** if any row is malformed.
 >
-> 1.  **chem IRI**: IRI of the chemical (e.g., `<http://...>` or a raw URL).
-> 2.  **SMILES**: SMILES string.
-> 3.  **db**: (Optional) Database source name or URI.
+> 1.  **chem IRI**: IRI of the chemical. Must be explicitly wrapped in angle brackets (e.g., `<http://...>`, `<urn:...>`) or start with `http(s)://`.
+> 2.  **SMILES**: SMILES string. Must be a valid sequence of SMILES characters.
+> 3.  **db**: (Optional) Database source name. **Note on URIs vs Literals:** The engine preserves the exact string formatting provided. To specify a URI for accurate SPARQL matching later, you *must* wrap it in angle brackets (e.g., `<http://rhea>`). Otherwise, `Rhea` will be treated as a literal string.
 
 Alternatively, you can dynamically fetch the compounds data on startup using a SPARQL query against a remote endpoint:
 

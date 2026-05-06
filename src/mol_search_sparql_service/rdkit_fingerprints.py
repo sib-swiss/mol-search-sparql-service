@@ -610,31 +610,31 @@ class MolSearchEngine:
                         break
 
                 if len(row) < 2:
-                    print(f"  - Warning: Skipping row {reader.line_num} due to insufficient columns (found {len(row)}, expected at least 2)")
-                    continue
+                    raise ValueError(
+                        f"Row {reader.line_num} has insufficient columns (found {len(row)}, expected at least 2)"
+                    )
 
-                try:
-                    # 1. chem IRI
-                    cid_raw = row[0].strip()
-                    # 2. SMILES
-                    smiles_raw = row[1].strip().strip('"')
-                    # 3. db (optional)
-                    # We do NOT strip("<>") here to preserve the distinction between URIs and literals.
-                    db_raw = row[2].strip() if len(row) > 2 else "unknown"
+                # 1. chem IRI
+                cid_raw = row[0].strip()
+                # 2. SMILES
+                smiles_raw = row[1].strip().strip('"')
+                # 3. db (optional)
+                # We do NOT strip("<>") here to preserve the distinction between URIs and literals.
+                db_raw = row[2].strip() if len(row) > 2 else "unknown"
 
-                    # Validate with regex
-                    if not iri_regex.match(cid_raw):
-                        print(f"  - Warning: Skipping row {reader.line_num} due to invalid IRI format: {cid_raw}")
-                        continue
-                    
-                    if not smiles_regex.match(smiles_raw):
-                        print(f"  - Warning: Skipping row {reader.line_num} for {cid_raw} due to invalid SMILES format: {smiles_raw}")
-                        continue
+                # Validate with regex
+                if not iri_regex.match(cid_raw):
+                    raise ValueError(
+                        f"Invalid IRI format on row {reader.line_num}: '{cid_raw}'. IRIs must be wrapped in <> or start with http(s)://"
+                    )
+                
+                if not smiles_regex.match(smiles_raw):
+                    raise ValueError(
+                        f"Invalid SMILES format on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'"
+                    )
 
-                    cid = cid_raw.strip("<>")
-                    compounds.append(CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw))
-                except Exception:
-                    continue
+                cid = cid_raw.strip("<>")
+                compounds.append(CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw))
 
         # Pre-parse molecules once for all fingerprint types
         print(f"Parsing {len(compounds)} molecules...")
