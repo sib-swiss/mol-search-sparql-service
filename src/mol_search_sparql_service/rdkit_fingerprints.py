@@ -573,13 +573,11 @@ class MolSearchEngine:
         # Regex for basic validation
         # IRI: wrapped in <> or starting with http
         iri_regex = re.compile(r"^<[^>]+>$|^https?://[^\s]+$")
-        # SMILES: basic characters found in SMILES (including % for large rings)
-        smiles_regex = re.compile(r"^[A-Za-z0-9@#\-\[\]\(\)\\\/=\+\.\*%]+$")
 
         # Persist the path so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
-        print(f"Reading compounds from {compounds_file}...")
-        compounds: list[CompoundEntry] = []
+        print(f"Reading and parsing compounds from {compounds_file}...")
+        valid_mols: list[tuple[CompoundEntry, Chem.Mol]] = []
 
         with open(compounds_file, "r", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter="\t")
@@ -628,20 +626,16 @@ class MolSearchEngine:
                         f"Invalid IRI format on row {reader.line_num}: '{cid_raw}'. IRIs must be wrapped in <> or start with http(s)://"
                     )
                 
-                if not smiles_regex.match(smiles_raw):
+                cid = cid_raw.strip("<>")
+                entry = CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw)
+                
+                # Defer SMILES validation to RDKit
+                mol = safe_mol_from_smiles(smiles_raw, cid=cid)
+                if mol is None:
                     raise ValueError(
-                        f"Invalid SMILES format on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'"
+                        f"RDKit failed to parse SMILES on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'"
                     )
 
-                cid = cid_raw.strip("<>")
-                compounds.append(CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw))
-
-        # Pre-parse molecules once for all fingerprint types
-        print(f"Parsing {len(compounds)} molecules...")
-        valid_mols: list[tuple[CompoundEntry, Chem.Mol]] = []
-        for entry in compounds:
-            mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
-            if mol:
                 valid_mols.append((entry, mol))
 
         # Compile In-Memory
