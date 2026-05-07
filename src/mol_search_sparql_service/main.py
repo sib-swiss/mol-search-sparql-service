@@ -34,6 +34,7 @@ def main() -> None:
         "-d", "--daemon", action="store_true", help="Daemonize the server process"
     )
     parser.add_argument(
+        "-t",
         "--fingerprints",
         type=str,
         help="Comma-separated list of fingerprint types to compute (e.g. morgan_ecfp,pattern). If omitted, all types are computed.",
