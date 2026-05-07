@@ -12,7 +12,6 @@ from rdkit.Chem import (
     MACCSkeys,
     PatternFingerprint,
 )
-from rdkit.Chem.AtomPairs import Pairs, Torsions
 
 # NOTE: we need to silence RDKit warnings that magically poped up from nowhere
 # even if it was working before, and no libs version have been changed
@@ -59,21 +58,18 @@ class FingerprintConfig:
 
 @dataclass
 class CompoundEntry:
-    """A single compound with its precomputed fingerprint."""
+    """A single compound's metadata."""
 
     id: str
     smiles: str
     db_name: str = "unknown"
-    fp: Any = None  # RDKit fingerprint object (ExplicitBitVect / IntSparseIntVect)
 
 
 @dataclass
 class Dataset:
     """All precomputed data for one fingerprint type."""
 
-    data: list[CompoundEntry]
     fps: list[Any]  # parallel list of raw RDKit FP objects
-    db_indices: dict[str, list[int]]  # db_name → list of indices into data/fps
 
 
 @dataclass
@@ -196,8 +192,8 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
     ),
     "atom_pair": FingerprintConfig(
         short_name="AP",
-        python_method=Pairs.GetAtomPairFingerprint,  # type: ignore[attr-defined]
-        default_options={},
+        python_method=rdFingerprintGenerator.GetAtomPairGenerator,
+        default_options={"fpSize": 2048},
         stereo_options={},
         description=(
             "Atom Pair fingerprint. Encodes pairs of atoms along with their "
@@ -221,8 +217,8 @@ FINGERPRINTS: dict[str, FingerprintConfig] = {
     ),
     "topological_torsion": FingerprintConfig(
         short_name="TT",
-        python_method=Torsions.GetTopologicalTorsionFingerprint,  # type: ignore[attr-defined]
-        default_options={},
+        python_method=rdFingerprintGenerator.GetTopologicalTorsionGenerator,
+        default_options={"fpSize": 2048},
         stereo_options={},
         description="Topological Torsion fingerprint. Encodes sequences of four bonded atoms.",
         explainability=FingerprintExplainability(
@@ -321,7 +317,7 @@ def get_fingerprint(
 
     func: Callable[..., Any] = cfg.python_method
 
-    if name.startswith("morgan_"):
+    if func.__name__.endswith("Generator"):
         generator = func(**opts)
         return generator.GetFingerprint(mol)
     else:
@@ -363,56 +359,30 @@ class MolSearchEngine:
         # keys: fingerprint type name (e.g. 'morgan_ecfp', 'pattern')
         # values: compiled Dataset for that fingerprint type
         self.datasets: dict[str, Dataset] = {}
-
-    def add_data(self, data: list[CompoundEntry], fp_type: str) -> None:
-        """Populate the engine with a list of CompoundEntry objects.
-
-        Each entry must have a precomputed 'fp' and optionally a 'db_name'.
-        """
-        # Optimization: Pre-calculate indices for each db_name
-        db_indices: dict[str, list[int]] = {}
-        fps: list[Any] = []
-
-        for idx, entry in enumerate(data):
-            # Extract FP for bulk operations
-            fps.append(entry.fp)
-
-            # Index by db_name
-            if entry.db_name not in db_indices:
-                db_indices[entry.db_name] = []
-            db_indices[entry.db_name].append(idx)
-
-        self.datasets[fp_type] = Dataset(data=data, fps=fps, db_indices=db_indices)
+        self.core_data: list[CompoundEntry] = []
+        self.db_indices: dict[str, list[int]] = {}
 
     def _get_indices(
         self, fp_type: str, db_names: list[str] | None = None
     ) -> range | list[int]:
-        """Helper to get valid indices based on db_names filter.
-
-        Returns:
-            A range (all) or a filtered list of integer indices.
-        """
+        """Helper to get valid indices based on db_names filter."""
         dataset = self.datasets.get(fp_type)
         if not dataset:
             raise ValueError(f"Dataset {fp_type} not loaded.")
 
         if not db_names:
             # Return range covering all indices
-            return range(len(dataset.data))
+            return range(len(self.core_data))
 
         indices: list[int] = []
         for db in db_names:
-            if db in dataset.db_indices:
-                indices.extend(dataset.db_indices[db])
+            if db in self.db_indices:
+                indices.extend(self.db_indices[db])
         return indices
 
     def get_databases(self) -> list[str]:
         """Return a list of all database names present in the engine."""
-        if not self.datasets:
-            return []
-        # All datasets share the same underlying data rows, so we can just use the first one
-        first_dataset = next(iter(self.datasets.values()))
-        return list(first_dataset.db_indices.keys())
+        return list(self.db_indices.keys())
 
     def search_similarity(
         self,
@@ -441,11 +411,11 @@ class MolSearchEngine:
         # Retrieve FPs for the target indices
         if not db_names:
             target_fps: list[Any] = dataset.fps
-            target_data: list[CompoundEntry] = dataset.data
+            target_data: list[CompoundEntry] = self.core_data
         else:
             # Construct subset list
             target_fps = [dataset.fps[i] for i in indices]
-            target_data = [dataset.data[i] for i in indices]
+            target_data = [self.core_data[i] for i in indices]
 
         if not target_fps:
             return []
@@ -490,23 +460,24 @@ class MolSearchEngine:
 
         # Screening
         # Optimization: We avoid creating intermediate lists of ALL compounds
-        data = dataset.data
         fps = dataset.fps
 
         for i in indices:
+            if fps[i] is None:
+                continue
             if DataStructs.AllProbeBitsMatch(query_fp, fps[i]):
-                candidates_data.append(data[i])
+                candidates_data.append((self.core_data[i], fps[i]))
 
         # Verification
         results: list[SubstructureResult] = []
-        for entry in candidates_data:
+        for entry, fp in candidates_data:
             try:
                 # Optimized verification: Parsing SMILES is the slow part.
                 target_mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
                 if target_mol is None:
                     continue
                 matches = target_mol.GetSubstructMatches(
-                    query_mol, useChirality=dataset.data[0].fp is not None and "chiral" in fp_type
+                    query_mol, useChirality="chiral" in fp_type
                 )
 
                 if matches and len(matches) >= min_match_count:
@@ -515,7 +486,7 @@ class MolSearchEngine:
                             id=entry.id,
                             smiles=entry.smiles,
                             db_name=entry.db_name,
-                            fp=entry.fp,
+                            fp=fp,
                             match_count=len(matches),
                         )
                     )
@@ -650,11 +621,20 @@ class MolSearchEngine:
         # Compile In-Memory
         print(f"Compiling fingerprints dynamically ({len(valid_mols)} compounds)...")
 
+        # Set up core engine data
+        self.core_data = [entry for entry, mol in valid_mols]
+        self.db_indices = {}
+        for idx, entry in enumerate(self.core_data):
+            if entry.db_name not in self.db_indices:
+                self.db_indices[entry.db_name] = []
+            self.db_indices[entry.db_name].append(idx)
+        self.datasets = {}
+
         for fp_name, cfg in FINGERPRINTS.items():
             print(f"  - Compiling {fp_name}...")
             try:
-                data = compile_fingerprints_in_memory(valid_mols, fp_name)
-                self.add_data(data, fp_name)
+                fps = compile_fingerprints_in_memory(valid_mols, fp_name)
+                self.datasets[fp_name] = Dataset(fps=fps)
             except Exception as e:
                 print(f"    Error compiling {fp_name}: {e}")
 
@@ -664,17 +644,17 @@ class MolSearchEngine:
 def compile_fingerprints_in_memory(
     valid_mols: list[tuple[CompoundEntry, Chem.Mol]],
     fp_type: str,
-) -> list[CompoundEntry]:
+) -> list[Any]:
     """Compiles fingerprints for a list of (CompoundEntry, Mol) pairs in-memory."""
-    data: list[CompoundEntry] = []
+    fps: list[Any] = []
     for entry, mol in valid_mols:
         try:
             fp = get_fingerprint(mol, fp_type)
-            # Create a new entry with the fingerprint attached
-            data.append(replace(entry, fp=fp))
+            fps.append(fp)
         except Exception as e:
             print(f"  - Warning: Failed to compute {fp_type} for {entry.id}: {e}")
-    return data
+            fps.append(None)
+    return fps
 
 
 # Initialize Engine globally for easy sharing
