@@ -508,34 +508,21 @@ class MolSearchEngine:
 
         print(f"Fetching data from {endpoint}...")
         try:
-            resp = requests.post(
+            with requests.post(
                 endpoint,
                 data={"query": query},
-                headers={"Accept": "application/sparql-results+json"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+                headers={"Accept": "text/tab-separated-values"},
+                stream=True
+            ) as resp:
+                resp.raise_for_status()
+                
+                # Stream directly to temp TSV file
+                fd, temp_path = tempfile.mkstemp(suffix=".tsv")
+                with os.fdopen(fd, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
         except Exception as e:
             raise RuntimeError(f"Failed to fetch data from SPARQL endpoint: {e}") from e
-
-        # Convert SPARQL JSON to TSV for local storage (to support multi-worker reload)
-        fd, temp_path = tempfile.mkstemp(suffix=".tsv")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            writer = csv.writer(f, delimiter="\t")
-            # Write header
-            vars = data.get("head", {}).get("vars", [])
-            writer.writerow([f"?{v}" for v in vars])
-            
-            # Write rows
-            for binding in data.get("results", {}).get("bindings", []):
-                row = []
-                for v in vars:
-                    val = binding.get(v, {}).get("value", "")
-                    # Wrap URI in <> for consistency with IRI regex
-                    if binding.get(v, {}).get("type") == "uri":
-                        val = f"<{val}>"
-                    row.append(val)
-                writer.writerow(row)
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
