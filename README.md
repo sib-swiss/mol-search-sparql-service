@@ -53,7 +53,7 @@ mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql
 ```
 
 Other available optional flags include:
-- `--fingerprints`: Comma-separated list of fingerprint types to compute (e.g. `morgan_ecfp,pattern`). If omitted, all types are computed.
+- `-t`, `--fingerprints`: Comma-separated list of fingerprint types to compute (e.g. `morgan_ecfp,pattern`). If omitted, all types are computed.
 - `-p`, `--port`: Port to run the server on (default: `8010`).
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
