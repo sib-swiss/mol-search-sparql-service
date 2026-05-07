@@ -545,7 +545,20 @@ class MolSearchEngine:
         # Persist the path so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
         print(f"Reading and parsing compounds from {compounds_file}...")
-        valid_mols: list[tuple[CompoundEntry, Chem.Mol]] = []
+        
+        target_fps = fp_types if fp_types else list(FINGERPRINTS.keys())
+        valid_fps = []
+        for fp_name in target_fps:
+            if fp_name not in FINGERPRINTS:
+                print(f"  - Warning: Unknown fingerprint type '{fp_name}', skipping.")
+            else:
+                valid_fps.append(fp_name)
+                self.datasets[fp_name] = Dataset(fps=[])
+                
+        self.core_data = []
+        self.db_indices = {}
+        
+        valid_count = 0
 
         with open(compounds_file, "r", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter="\t")
@@ -603,50 +616,28 @@ class MolSearchEngine:
                     print(f"  - Warning: RDKit failed to parse SMILES on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'. Skipping.")
                     continue
 
-                valid_mols.append((entry, mol))
+                # Append metadata
+                idx = len(self.core_data)
+                self.core_data.append(entry)
+                
+                if entry.db_name not in self.db_indices:
+                    self.db_indices[entry.db_name] = []
+                self.db_indices[entry.db_name].append(idx)
+                
+                # Compute and append fingerprints immediately to avoid holding mol in memory
+                for fp_name in valid_fps:
+                    try:
+                        fp = get_fingerprint(mol, fp_name)
+                        self.datasets[fp_name].fps.append(fp)
+                    except Exception as e:
+                        print(f"  - Warning: Failed to compute {fp_name} for {cid}: {e}")
+                        self.datasets[fp_name].fps.append(None)
+                
+                valid_count += 1
+                if valid_count % 100000 == 0:
+                    print(f"  - Processed {valid_count} valid compounds...")
 
-        # Compile In-Memory
-        print(f"Compiling fingerprints dynamically ({len(valid_mols)} compounds)...")
-
-        # Set up core engine data
-        self.core_data = [entry for entry, mol in valid_mols]
-        self.db_indices = {}
-        for idx, entry in enumerate(self.core_data):
-            if entry.db_name not in self.db_indices:
-                self.db_indices[entry.db_name] = []
-            self.db_indices[entry.db_name].append(idx)
-        self.datasets = {}
-
-        target_fps = fp_types if fp_types else list(FINGERPRINTS.keys())
-
-        for fp_name in target_fps:
-            if fp_name not in FINGERPRINTS:
-                print(f"  - Warning: Unknown fingerprint type '{fp_name}', skipping.")
-                continue
-            print(f"  - Compiling {fp_name}...")
-            try:
-                fps = compile_fingerprints_in_memory(valid_mols, fp_name)
-                self.datasets[fp_name] = Dataset(fps=fps)
-            except Exception as e:
-                print(f"    Error compiling {fp_name}: {e}")
-
-        print("Compilation complete.")
-
-
-def compile_fingerprints_in_memory(
-    valid_mols: list[tuple[CompoundEntry, Chem.Mol]],
-    fp_type: str,
-) -> list[Any]:
-    """Compiles fingerprints for a list of (CompoundEntry, Mol) pairs in-memory."""
-    fps: list[Any] = []
-    for entry, mol in valid_mols:
-        try:
-            fp = get_fingerprint(mol, fp_type)
-            fps.append(fp)
-        except Exception as e:
-            print(f"  - Warning: Failed to compute {fp_type} for {entry.id}: {e}")
-            fps.append(None)
-    return fps
+        print(f"Compilation complete. {valid_count} compounds loaded into the engine.")
 
 
 # Initialize Engine globally for easy sharing
