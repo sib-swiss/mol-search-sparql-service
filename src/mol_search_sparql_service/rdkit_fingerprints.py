@@ -497,7 +497,7 @@ class MolSearchEngine:
                 continue
         return results
 
-    def load_from_sparql(self, endpoint: str, query: str) -> None:
+    def load_from_sparql(self, endpoint: str, query: str, fp_types: list[str] | None = None) -> None:
         """
         Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
         and load it into the engine. The temp file path is stored in the
@@ -539,9 +539,9 @@ class MolSearchEngine:
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
-        self.load_file(temp_path)
+        self.load_file(temp_path, fp_types=fp_types)
 
-    def load_file(self, compounds_file: str) -> None:
+    def load_file(self, compounds_file: str, fp_types: list[str] | None = None) -> None:
         """
         Load compounds from a TSV file.
         Format (by column order):
@@ -630,7 +630,12 @@ class MolSearchEngine:
             self.db_indices[entry.db_name].append(idx)
         self.datasets = {}
 
-        for fp_name, cfg in FINGERPRINTS.items():
+        target_fps = fp_types if fp_types else list(FINGERPRINTS.keys())
+
+        for fp_name in target_fps:
+            if fp_name not in FINGERPRINTS:
+                print(f"  - Warning: Unknown fingerprint type '{fp_name}', skipping.")
+                continue
             print(f"  - Compiling {fp_name}...")
             try:
                 fps = compile_fingerprints_in_memory(valid_mols, fp_name)

@@ -53,9 +53,19 @@ mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql
 ```
 
 Other available optional flags include:
+- `--fingerprints`: Comma-separated list of fingerprint types to compute (e.g. `morgan_ecfp,pattern`). If omitted, all types are computed.
 - `-p`, `--port`: Port to run the server on (default: `8010`).
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
+
+### 🧠 Memory Profile & Optimization
+
+By default, the service computes **all 9 fingerprint types** (including chiral variants) for every loaded compound. Because they are hashed into `ExplicitBitVect` (2048-bits), each fingerprint consumes roughly **256 bytes per molecule**. This equates to a total footprint of approximately **~2.5 GB of RAM per 1,000,000 compounds**.
+
+If you do not need all fingerprints, you can drastically reduce memory usage by explicitly passing the `--fingerprints` flag to specify only the ones you intend to search against.
+
+> [!WARNING]
+> **A Note on `atom_pair` and `topological_torsion`**: Previous versions of this service computed these fingerprints as exact, unhashed sparse vectors. For complex molecules, these sparse maps grew exponentially, causing memory usage to skyrocket. They are now forced into fixed-size 2048-bit dense vectors to cap memory and dramatically accelerate similarity speeds. While this is the industry standard for fast searching, minor bit-collisions may occur compared to exact sparse pairwise matching.
 
 
 <!-- AUTOGEN_DOCS_START -->

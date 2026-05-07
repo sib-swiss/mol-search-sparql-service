@@ -246,8 +246,12 @@ async def lifespan(app: FastAPI):
     compounds_file = os.environ.get("COMPOUNDS_FILE")
     if compounds_file and not engine.datasets:
         print(f"Initializing engine from: {compounds_file}")
+        
+        fp_list = os.environ.get("FINGERPRINTS_LIST")
+        fp_types = fp_list.split(",") if fp_list else None
+        
         try:
-            engine.load_file(compounds_file)
+            engine.load_file(compounds_file, fp_types=fp_types)
         except Exception as e:
             print(f"Error loading compounds file on startup: {e}")
     yield

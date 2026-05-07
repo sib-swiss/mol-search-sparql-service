@@ -33,18 +33,27 @@ def main() -> None:
     parser.add_argument(
         "-d", "--daemon", action="store_true", help="Daemonize the server process"
     )
+    parser.add_argument(
+        "--fingerprints",
+        type=str,
+        help="Comma-separated list of fingerprint types to compute (e.g. morgan_ecfp,pattern). If omitted, all types are computed.",
+    )
     args = parser.parse_args()
 
     if args.sparql and not args.endpoint:
         parser.error("-s/--sparql requires -e/--endpoint")
 
+    fp_types = args.fingerprints.split(",") if args.fingerprints else None
+    if args.fingerprints:
+        os.environ["FINGERPRINTS_LIST"] = args.fingerprints
+
     # 1. Load Data
     if args.file:
-        engine.load_file(args.file)
+        engine.load_file(args.file, fp_types=fp_types)
     else:
         with open(args.sparql, "r") as f:
             query = f.read()
-        engine.load_from_sparql(args.endpoint, query)
+        engine.load_from_sparql(args.endpoint, query, fp_types=fp_types)
 
     # Daemonize if requested
     if args.daemon:
