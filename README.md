@@ -58,6 +58,36 @@ Other available optional flags include:
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
 
+### 📊 Query Examples
+
+Once the service is running, you can query it using SPARQL. Here are some common examples:
+
+**Similarity Search** — Find compounds similar to a query molecule:
+
+```sparql
+PREFIX func: <urn:sparql-function:>
+SELECT ?result ?score WHERE {
+    [] a func:SimilaritySearch ;
+        func:smiles "c1ccccc1" ;
+        func:limit 5 ;
+        func:result ?result ;
+        func:score ?score .
+}
+```
+
+**Substructure Search** — Find all compounds containing a specific substructure (e.g., benzene ring):
+
+```sparql
+PREFIX func: <urn:sparql-function:>
+SELECT ?result ?matchCount WHERE {
+    [] a func:SubstructureSearch ;
+        func:smart "c1ccccc1" ;
+        func:limit 100 ;
+        func:result ?result ;
+        func:matchCount ?matchCount .
+}
+```
+
 ### 🧠 Memory Profile & Optimization
 
 By default, the service computes **all 9 fingerprint types** (including chiral variants) for every loaded compound. Because they are hashed into `ExplicitBitVect` (2048-bits), each fingerprint consumes roughly **256 bytes per molecule**. This equates to a total footprint of approximately **~2.5 GB of RAM per 1,000,000 compounds**.

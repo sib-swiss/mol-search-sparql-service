@@ -121,6 +121,25 @@ def test_substructure_search_default():
     assert "matchCount" in bindings[0]
 
 
+def test_substructure_search_with_limit():
+    # Substructure search example from README - benzene ring with limit
+    bindings = sparql_query("""
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchCount WHERE {
+            [] a func:SubstructureSearch ;
+                func:smart "c1ccccc1" ;
+                func:limit 100 ;
+                func:result ?result ;
+                func:matchCount ?matchCount .
+        }
+    """)
+    assert len(bindings) > 0
+    assert len(bindings) <= 100
+    assert "matchCount" in bindings[0]
+    # Verify matchCount is numeric
+    assert int(bindings[0]["matchCount"]["value"]) >= 1
+
+
 def test_list_fingerprints():
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>
