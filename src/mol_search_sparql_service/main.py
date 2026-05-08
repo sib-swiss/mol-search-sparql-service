@@ -58,7 +58,10 @@ def main() -> None:
         help="Number of Uvicorn workers (default: 1)",
     )
     parser.add_argument(
-        "-d", "--daemon", action="store_true", help="Daemonize the server process"
+        "-d",
+        "--daemon",
+        action="store_true",
+        help="Daemonize the server process (after fingerprints have been computed and all validation checks passed)",
     )
     parser.add_argument(
         "-t",
@@ -68,6 +71,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # === VALIDATION PHASE (before any irreversible operations) ===
     if args.sparql and not args.endpoint:
         parser.error("-s/--sparql requires -e/--endpoint")
 
@@ -85,6 +89,7 @@ def main() -> None:
 
     _validate_port(args.port)
 
+    # === DATA LOADING PHASE (errors still visible to user) ===
     # 1. Load Data
     if args.file:
         engine.load_file(args.file, fp_types=fp_types)
@@ -93,6 +98,7 @@ def main() -> None:
             query = f.read()
         engine.load_from_sparql(args.endpoint, query, fp_types=fp_types)
 
+    # === DAEMONIZATION PHASE (only after all checks and preparations complete) ===
     # Daemonize if requested
     if args.daemon:
         # Double fork to detach from terminal completely
