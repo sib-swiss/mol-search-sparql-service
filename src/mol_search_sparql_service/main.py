@@ -69,6 +69,15 @@ def main() -> None:
         type=str,
         help="Comma-separated list of fingerprint types to compute (e.g. morgan_ecfp,pattern). If omitted, all types are computed.",
     )
+    parser.add_argument(
+        "-u",
+        "--public-url",
+        type=str,
+        default=None,
+        help="Public URL of the SPARQL endpoint exposed to clients (e.g. https://api.example.com/sparql). "
+             "Useful when the service runs behind a reverse proxy. "
+             "Defaults to http://localhost:<port>/sparql.",
+    )
     args = parser.parse_args()
 
     # === VALIDATION PHASE (before any irreversible operations) ===
@@ -86,6 +95,9 @@ def main() -> None:
 
     if args.fingerprints:
         os.environ["FINGERPRINTS_LIST"] = args.fingerprints
+
+    public_url = args.public_url or f"http://localhost:{args.port}/sparql"
+    os.environ["SPARQL_PUBLIC_URL"] = public_url
 
     _validate_port(args.port)
 

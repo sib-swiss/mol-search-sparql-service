@@ -231,12 +231,13 @@ def sparql_schema() -> str:
 @mcp.prompt()
 def sparql_assistant() -> str:
     """Interactive prompt providing schema and guidelines for writing SPARQL against this service."""
+    sparql_url = os.environ.get("SPARQL_PUBLIC_URL", "/sparql")
     return f"""You are an expert in writing SPARQL queries for the Chemistry Search Service.
 Use the following documentation to write correct queries that strictly match the defined `func:` namespace and classes:
 
 {generate_docs()}
 
-The SPARQL endpoint accepts `HTTP GET` and `HTTP POST`, typically at `/sparql` on the hosting server.
+The SPARQL endpoint accepts `HTTP GET` and `HTTP POST` at: {sparql_url}
 """
 
 

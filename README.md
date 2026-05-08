@@ -57,6 +57,7 @@ Other available optional flags include:
 - `-p`, `--port`: Port to run the server on (default: `8010`).
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
+- `-u`, `--public-url`: Public URL of the SPARQL endpoint exposed to clients (e.g. `https://api.example.com/sparql`). Used by the MCP server to advertise the correct endpoint address. Useful when running behind a reverse proxy. Defaults to `http://localhost:<port>/sparql`.
 
 ### 🌐 Default Endpoints
 
