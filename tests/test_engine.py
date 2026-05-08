@@ -45,3 +45,14 @@ def test_engine_substructure_search(engine):
 def test_invalid_fingerprint(engine):
     with pytest.raises(ValueError):
         engine.search_similarity("C", fp_type="nonexistent_fp")
+
+
+def test_pattern_always_computed_when_fp_types_restricted():
+    """pattern fingerprint must always be loaded, even if not in fp_types, for substructure search."""
+    eng = MolSearchEngine()
+    # Load with only morgan_ecfp — pattern should be added automatically
+    eng.load_file("compounds.tsv", fp_types=["morgan_ecfp"])
+    assert "pattern" in eng.datasets, "pattern dataset must always be present"
+    # Substructure search should work without error
+    results = eng.search_substructure("c1ccccc1")
+    assert len(results) > 0

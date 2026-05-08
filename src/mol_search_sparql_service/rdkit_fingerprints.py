@@ -555,6 +555,11 @@ class MolSearchEngine:
                 f"Available types: {available}"
             )
 
+        # 'pattern' is always required for substructure search — add it silently if missing
+        if "pattern" not in target_fps:
+            print("  - Note: 'pattern' fingerprint automatically added (required for substructure search).")
+            target_fps = list(target_fps) + ["pattern"]
+
         valid_fps = target_fps
         for fp_name in valid_fps:
             self.datasets[fp_name] = Dataset(fps=[])

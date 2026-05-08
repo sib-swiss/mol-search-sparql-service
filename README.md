@@ -53,7 +53,7 @@ mol-search-sparql-service -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql
 ```
 
 Other available optional flags include:
-- `-t`, `--fingerprints`: Comma-separated list of fingerprint types to compute (e.g. `morgan_ecfp,pattern`). If omitted, all types are computed.
+- `-t`, `--fingerprints`: Comma-separated list of fingerprint types to compute (e.g. `morgan_ecfp,pattern`). If omitted, all types are computed. The `pattern` fingerprint is **always computed** regardless of this option, as it is required for substructure search.
 - `-p`, `--port`: Port to run the server on (default: `8010`).
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
@@ -95,8 +95,8 @@ SELECT ?result ?matchCount WHERE {
 }
 ```
 
-> [!IMPORTANT]
-> Substructure search requires the `pattern` fingerprint to be computed. If you use the `-t/--fingerprints` option, make sure to include `pattern` in the comma-separated list (e.g., `-t morgan_ecfp,pattern`).
+> [!NOTE]
+> Substructure search requires the `pattern` fingerprint. It is **always computed automatically**, even when using the `-t/--fingerprints` option to restrict which fingerprints are loaded.
 
 ### 🧠 Memory Profile & Optimization
 
