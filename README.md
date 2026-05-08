@@ -95,6 +95,9 @@ SELECT ?result ?matchCount WHERE {
 }
 ```
 
+> [!IMPORTANT]
+> Substructure search requires the `pattern` fingerprint to be computed. If you use the `-t/--fingerprints` option, make sure to include `pattern` in the comma-separated list (e.g., `-t morgan_ecfp,pattern`).
+
 ### 🧠 Memory Profile & Optimization
 
 By default, the service computes **all 9 fingerprint types** (including chiral variants) for every loaded compound. Because they are hashed into `ExplicitBitVect` (2048-bits), each fingerprint consumes roughly **256 bytes per molecule**. This equates to a total footprint of approximately **~2.5 GB of RAM per 1,000,000 compounds**.
