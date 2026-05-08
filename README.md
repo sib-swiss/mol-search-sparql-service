@@ -58,6 +58,13 @@ Other available optional flags include:
 - `-w`, `--workers`: Number of Uvicorn workers (default: `1`).
 - `-d`, `--daemon`: Run the server in the background (logs to `server.log`).
 
+### 🌐 Default Endpoints
+
+Once the service is running (default port 8010), you can access:
+
+- **SPARQL Endpoint**: `http://localhost:8010/sparql` — Standard SPARQL Protocol endpoint for querying
+- **MCP Server**: `http://localhost:8010/mcp` — Model Context Protocol server endpoint for LLM integration
+
 ### 📊 Query Examples
 
 Once the service is running, you can query it using SPARQL. Here are some common examples:
