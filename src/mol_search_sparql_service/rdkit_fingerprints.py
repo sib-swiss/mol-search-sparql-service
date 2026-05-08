@@ -547,13 +547,17 @@ class MolSearchEngine:
         print(f"Reading and parsing compounds from {compounds_file}...")
         
         target_fps = fp_types if fp_types else list(FINGERPRINTS.keys())
-        valid_fps = []
-        for fp_name in target_fps:
-            if fp_name not in FINGERPRINTS:
-                print(f"  - Warning: Unknown fingerprint type '{fp_name}', skipping.")
-            else:
-                valid_fps.append(fp_name)
-                self.datasets[fp_name] = Dataset(fps=[])
+        invalid_fps = [fp for fp in target_fps if fp not in FINGERPRINTS]
+        if invalid_fps:
+            available = ", ".join(sorted(FINGERPRINTS.keys()))
+            raise ValueError(
+                f"Unknown fingerprint type(s): {', '.join(invalid_fps)}\n"
+                f"Available types: {available}"
+            )
+
+        valid_fps = target_fps
+        for fp_name in valid_fps:
+            self.datasets[fp_name] = Dataset(fps=[])
                 
         self.core_data = []
         self.db_indices = {}
