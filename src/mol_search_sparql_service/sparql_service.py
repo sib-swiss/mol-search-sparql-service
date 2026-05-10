@@ -160,6 +160,7 @@ def substructure_search(
     limit: int = 100,
     db_names: str | None = None,
     min_match_count: int = 1,
+    use_chirality: bool = False,
 ) -> list[SubstructureSearchResult]:
     """Perform substructure search using a SMARTS/SMILES pattern.
 
@@ -168,6 +169,7 @@ def substructure_search(
         limit: Maximum number of results to return (default: 100).
         db_names: Optional database name to limit the search.
         min_match_count: Minimum number of substructure matches required.
+        use_chirality: If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false.
 
     Example:
         ```sparql
@@ -175,6 +177,18 @@ def substructure_search(
         SELECT ?result ?matchCount WHERE {
             [] a func:SubstructureSearch ;
                 func:smart "c1ccccc1" ;
+                func:result ?result ;
+                func:matchCount ?matchCount .
+        }
+        ```
+
+    Example with chirality:
+        ```sparql
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchCount WHERE {
+            [] a func:SubstructureSearch ;
+                func:smart "[C@@H](N)(O)F" ;
+                func:useChirality true ;
                 func:result ?result ;
                 func:matchCount ?matchCount .
         }
@@ -187,6 +201,7 @@ def substructure_search(
             limit=limit,
             db_names=db_list,
             min_match_count=min_match_count,
+            use_chirality=use_chirality,
         )
         return [
             SubstructureSearchResult(result=URIRef(r.id), matchCount=int(r.match_count))

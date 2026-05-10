@@ -439,8 +439,15 @@ class MolSearchEngine:
         db_names: list[str] | None = None,
         fp_type: str = "pattern",
         min_match_count: int = 1,
+        use_chirality: bool = False,
     ) -> list[SubstructureResult]:
-        """Executes a substructure search (Screening + Verification)."""
+        """Executes a substructure search (Screening + Verification).
+
+        Args:
+            use_chirality: If True, both tetrahedral (R/S) and double-bond (E/Z)
+                stereochemistry are taken into account during matching.
+                Defaults to False for maximum recall.
+        """
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
@@ -477,7 +484,7 @@ class MolSearchEngine:
                 if target_mol is None:
                     continue
                 matches = target_mol.GetSubstructMatches(
-                    query_mol, useChirality="chiral" in fp_type
+                    query_mol, useChirality=use_chirality
                 )
 
                 if matches and len(matches) >= min_match_count:
