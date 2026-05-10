@@ -2,17 +2,43 @@ import pytest
 import subprocess
 import tempfile
 import os
-from pathlib import Path
 
 
 def run_cli(*args):
-    """Run the CLI and return the result."""
+    """Run the CLI, wait for it to exit, and return the result.
+    Only use for commands that are expected to fail fast (validation errors).
+    """
     result = subprocess.run(
         ["uv", "run", "mol-search-sparql-service"] + list(args),
         capture_output=True,
         text=True,
     )
     return result
+
+
+def run_cli_validation_only(*args, timeout: float = 5.0):
+    """Run the CLI and kill it after `timeout` seconds.
+
+    Validation errors are printed and the process exits before data loading,
+    so a short timeout is sufficient to capture them. If the process is still
+    alive at the deadline it means validation passed — we kill it and return
+    whatever stderr was collected so far.
+
+    Returns (returncode_or_None, stderr).
+    """
+    proc = subprocess.Popen(
+        ["uv", "run", "mol-search-sparql-service"] + list(args),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        _, stderr = proc.communicate(timeout=timeout)
+        return proc.returncode, stderr
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        _, stderr = proc.communicate()
+        return None, stderr  # None means "still running at timeout = validation passed"
 
 
 def test_unknown_fingerprint_type():
@@ -85,39 +111,31 @@ def test_invalid_port_negative():
 
 
 def test_valid_fingerprint_subset():
-    """Test that valid fingerprint subset is accepted (doesn't error)."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".tsv", delete=False
-    ) as f:
-        # Write minimal valid TSV
+    """Valid fingerprint subset must not produce a fingerprint validation error."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
         f.write("?chem\t?smiles\t?db\n")
         f.write("<http://example.com/mol1>\tCCO\texample\n")
         temp_file = f.name
 
     try:
-        # This should not error during CLI parsing (it will error later when trying to start server)
-        result = run_cli("-f", temp_file, "-t", "morgan_ecfp,pattern")
-        # We expect it to fail when trying to start the server (port issue), not CLI parsing
-        # So we check that the error is NOT about fingerprints
-        assert "Unknown fingerprint type" not in result.stderr
+        rc, stderr = run_cli_validation_only("-f", temp_file, "-t", "morgan_ecfp,pattern")
+        assert "Unknown fingerprint type" not in stderr
     finally:
         os.unlink(temp_file)
 
 
 def test_valid_port_range():
-    """Test that valid port numbers (1-65535) don't error in validation."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".tsv", delete=False
-    ) as f:
-        # Write minimal valid TSV
+    """Valid port numbers must not produce a port-range validation error."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
         f.write("?chem\t?smiles\t?db\n")
         f.write("<http://example.com/mol1>\tCCO\texample\n")
         temp_file = f.name
 
     try:
         for port in [1, 80, 8080, 65535]:
-            result = run_cli("-f", temp_file, "-p", str(port))
-            # Should not error due to port validation
-            assert "Port must be between 1 and 65535" not in result.stderr
+            rc, stderr = run_cli_validation_only("-f", temp_file, "-p", str(port))
+            assert "Port must be between 1 and 65535" not in stderr, (
+                f"Port {port} should be in valid range but got: {stderr}"
+            )
     finally:
         os.unlink(temp_file)
