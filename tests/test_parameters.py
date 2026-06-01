@@ -181,3 +181,123 @@ def test_substructure_chirality_ez():
     finally:
         os.unlink(path)
 
+
+def test_matched_fragments_populated_and_parallel():
+    """Each result carries parallel matched_smiles / matched_smarts lists."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = (
+        "?chem\t?smiles\t?db\n"
+        "<http://ex.org/butene>\tC/C=C/C\ttest\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        results = eng.search_substructure("C=CC", use_chirality=False)
+        assert len(results) == 1
+        r = results[0]
+        # Lists are parallel and non-empty.
+        assert len(r.matched_smiles) == len(r.matched_smarts)
+        assert len(r.matched_smiles) >= 1
+        # match_count counts raw matches; deduped fragments never exceed it.
+        assert len(r.matched_smiles) <= r.match_count
+        assert all(isinstance(s, str) and s for s in r.matched_smiles)
+        assert all(isinstance(s, str) and s for s in r.matched_smarts)
+    finally:
+        os.unlink(path)
+
+
+def test_matched_fragments_preserve_stereo_when_search_ignores_it():
+    """A stereo-free query still returns matched fragments carrying the
+    target's E/Z geometry."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = (
+        "?chem\t?smiles\t?db\n"
+        "<http://ex.org/trans>\tC/C=C/C\ttest\n"   # (E)
+        "<http://ex.org/cis>\tC/C=C\\C\ttest\n"    # (Z)
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        # Query has no stereo, so both isomers match...
+        results = {r.id: r for r in eng.search_substructure("C=CC", use_chirality=False)}
+        assert set(results) == {"http://ex.org/trans", "http://ex.org/cis"}
+
+        # ...but each matched fragment keeps the directional bond from its target.
+        trans_frags = results["http://ex.org/trans"].matched_smiles
+        cis_frags = results["http://ex.org/cis"].matched_smiles
+        assert any("/" in s and "\\" not in s for s in trans_frags)
+        assert any("\\" in s for s in cis_frags)
+        # SMARTS fragments also encode the geometry.
+        assert any("/" in s or "\\" in s for s in results["http://ex.org/trans"].matched_smarts)
+    finally:
+        os.unlink(path)
+
+
+def test_matched_fragments_preserve_tetrahedral_stereo():
+    """A stereo-free query still returns matched fragments carrying the
+    target's tetrahedral (R/S) configuration."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = (
+        "?chem\t?smiles\t?db\n"
+        "<http://ex.org/l-ala>\t[NH3+][C@@H](C)C(=O)[O-]\ttest\n"  # L-Ala (S)
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        # Query has no stereo, but the fragment must keep the stereocenter.
+        r = eng.search_substructure("NC(C)C(=O)O", use_chirality=False)[0]
+        assert any("@" in s for s in r.matched_smiles)
+        assert any("@" in s for s in r.matched_smarts)
+    finally:
+        os.unlink(path)
+
+
+def test_matched_fragments_deduplicated():
+    """Fragments that render identically are collapsed; distinct ones are kept."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    # Bibenzyl has two benzene rings: a benzene query matches both, but the two
+    # fragments render identically -> collapsed to a single deduped fragment.
+    tsv = (
+        "?chem\t?smiles\t?db\n"
+        "<http://ex.org/bibenzyl>\tc1ccccc1CCc1ccccc1\ttest\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        r = eng.search_substructure("c1ccccc1", use_chirality=False)[0]
+        assert r.match_count == 2  # two rings matched
+        assert len(r.matched_smiles) == 1  # both render the same -> deduped
+        # No duplicates remain among the (smiles, smarts) pairs.
+        pairs = list(zip(r.matched_smiles, r.matched_smarts))
+        assert len(pairs) == len(set(pairs))
+    finally:
+        os.unlink(path)
+

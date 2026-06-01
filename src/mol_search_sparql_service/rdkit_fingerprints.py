@@ -5,7 +5,7 @@ import os
 import pickle
 import tempfile
 from typing import Any, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from rdkit import Chem
 from rdkit import DataStructs
 from rdkit.Chem import (
@@ -121,6 +121,11 @@ class SubstructureResult:
     db_name: str
     fp: Any = None
     match_count: int = 0
+    # One entry per distinct matched fragment (deduplicated). Parallel lists:
+    # matched_smiles[i] and matched_smarts[i] describe the same matched atoms,
+    # rendered from the target molecule so its stereochemistry is preserved.
+    matched_smiles: list[str] = field(default_factory=list)
+    matched_smarts: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -534,6 +539,29 @@ class MolSearchEngine:
                 )
 
                 if matches and len(matches) >= min_match_count:
+                    # Render each matched atom set back to SMILES and SMARTS from
+                    # the target molecule, so the result carries the target's
+                    # stereochemistry even when matching ignored it. Deduplicate
+                    # fragments that render identically.
+                    seen: set[tuple[str, str]] = set()
+                    matched_smiles: list[str] = []
+                    matched_smarts: list[str] = []
+                    for atom_ids in matches:
+                        atoms = list(atom_ids)
+                        try:
+                            smi = Chem.MolFragmentToSmiles(
+                                target_mol, atomsToUse=atoms, isomericSmiles=True
+                            )
+                            sma = Chem.MolFragmentToSmarts(target_mol, atomsToUse=atoms)
+                        except Exception:
+                            continue
+                        key = (smi, sma)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        matched_smiles.append(smi)
+                        matched_smarts.append(sma)
+
                     results.append(
                         SubstructureResult(
                             id=entry.id,
@@ -541,6 +569,8 @@ class MolSearchEngine:
                             db_name=entry.db_name,
                             fp=fp,
                             match_count=len(matches),
+                            matched_smiles=matched_smiles,
+                            matched_smarts=matched_smarts,
                         )
                     )
 
