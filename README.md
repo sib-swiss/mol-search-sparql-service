@@ -110,16 +110,18 @@ SELECT ?result ?score WHERE {
 }
 ```
 
-**Substructure Search** — Find all compounds containing a specific substructure (e.g., benzene ring):
+**Substructure Search** — Find all compounds containing a specific substructure (e.g., benzene ring). Each result also reports the matched fragment as SMILES and SMARTS, rendered from the target so its stereochemistry is preserved (one row per distinct match):
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
-SELECT ?result ?matchCount WHERE {
+SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
         func:smart "c1ccccc1" ;
         func:limit 100 ;
         func:result ?result ;
-        func:matchCount ?matchCount .
+        func:matchCount ?matchCount ;
+        func:matchedSmiles ?matchedSmiles ;
+        func:matchedSmarts ?matchedSmarts .
 }
 ```
 
@@ -250,16 +252,20 @@ Perform substructure search using a SMARTS/SMILES pattern.
 |----------------------|------|-------------|
 | `func:result` | `URIRef` | The URI of the matching compound. |
 | `func:matchCount` | `int` | Number of matches found (1 if boolean match). |
+| `func:matchedSmiles` | `str` | SMILES of the matched fragment, rendered from the target (stereo preserved). |
+| `func:matchedSmarts` | `str` | SMARTS of the matched fragment, rendered from the target (stereo preserved). |
 
 **Example 1:**
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
-SELECT ?result ?matchCount WHERE {
+SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
         func:smart "c1ccccc1" ;
         func:result ?result ;
-        func:matchCount ?matchCount .
+        func:matchCount ?matchCount ;
+        func:matchedSmiles ?matchedSmiles ;
+        func:matchedSmarts ?matchedSmarts .
 }
 ```
 
