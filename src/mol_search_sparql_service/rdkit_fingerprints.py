@@ -343,10 +343,22 @@ def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
             ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES
             ^ Chem.SanitizeFlags.SANITIZE_CLEANUP,
         )
-        return mol
     except Exception as e:
         print(f"{cid}\terror\t{str(e)}")
         return None
+
+    # Perceive stereochemistry from the parsed structure. With sanitize=False,
+    # the SMILES directional bonds (/ and \) are stored but double-bond E/Z
+    # stereo is never assigned (SanitizeMol does not do this step), leaving such
+    # bonds as STEREONONE. Without this, use_chirality=True cannot distinguish
+    # E/Z geometry. Guarded separately so a stereo-perception failure does not
+    # discard an otherwise-valid molecule.
+    try:
+        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+    except Exception:
+        pass
+
+    return mol
 
 
 # ---------------------------------------------------------------------------
