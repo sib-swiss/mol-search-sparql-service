@@ -273,12 +273,14 @@ SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
-SELECT ?result ?matchCount WHERE {
+SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
         func:smart "[C@@H](N)(O)F" ;
         func:useChirality true ;
         func:result ?result ;
-        func:matchCount ?matchCount .
+        func:matchCount ?matchCount ;
+        func:matchedSmiles ?matchedSmiles ;
+        func:matchedSmarts ?matchedSmarts .
 }
 ```
 
