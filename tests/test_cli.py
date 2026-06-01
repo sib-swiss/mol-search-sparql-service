@@ -2,6 +2,7 @@ import pytest
 import subprocess
 import tempfile
 import os
+import signal
 
 
 def run_cli(*args):
@@ -26,17 +27,33 @@ def run_cli_validation_only(*args, timeout: float = 5.0):
 
     Returns (returncode_or_None, stderr).
     """
+    # `uv run` launches the actual server as a grandchild process. Killing only
+    # the `uv` parent (proc.kill()) would orphan the server, which keeps the
+    # inherited stdout/stderr pipes open and makes the follow-up communicate()
+    # block forever. start_new_session=True puts the whole tree in its own
+    # process group so we can signal every descendant at once.
     proc = subprocess.Popen(
         ["uv", "run", "mol-search-sparql-service"] + list(args),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
+
+    def _kill_process_group() -> None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            # Process group already gone; nothing to clean up.
+            pass
+
     try:
         _, stderr = proc.communicate(timeout=timeout)
         return proc.returncode, stderr
     except subprocess.TimeoutExpired:
-        proc.kill()
+        # Validation passed (process is still alive). Kill the entire group so
+        # the orphaned server releases the pipes and communicate() can return.
+        _kill_process_group()
         _, stderr = proc.communicate()
         return None, stderr  # None means "still running at timeout = validation passed"
 
