@@ -20,6 +20,33 @@ Built using [**RDKit**](https://www.rdkit.org/) and [**rdflib-endpoint**](https:
   }
   ```
 
+  Federated query to get more information about molecule in rhea:
+
+  ```sparql
+  #+ endpoint: https://sparql.rhea-db.org/sparql/
+  PREFIX func: <urn:sparql-function:>
+  PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+  PREFIX rh: <http://rdf.rhea-db.org/>
+  
+  SELECT DISTINCT ?chebi ?chebiLabel ?score ?rhea ?equation WHERE {
+    # 1) Run RDKit similarity search, returning ChEBI IRIs in ?chebi
+    SERVICE <https://biosoda.unil.ch/mol-search/sparql> {
+      [] a func:SimilaritySearch ;
+        func:smiles "c1ccccc1" ; # benzene
+        func:limit 20 ;
+        func:result ?chebi ;
+        func:score ?score .
+    }
+    # 2) Join the similar hits to Rhea reactions via the ChEBI class used by each Rhea participant
+    ?rhea rdfs:subClassOf rh:Reaction ;
+      rh:status rh:Approved ;
+      rh:equation ?equation ;
+      rh:side/rh:contains/rh:compound/rdfs:subClassOf ?chebi .
+    ?chebi rdfs:label ?chebiLabel .
+  }
+  ORDER BY DESC(?score) ?rhea
+  LIMIT 50
+
 - **MCP Server**: Exposes SPARQL functions documentation through resource and prompt to help LLMs to perform searches (experimental).
 
 ## 📥 Installation

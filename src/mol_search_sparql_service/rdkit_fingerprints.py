@@ -1,6 +1,8 @@
 import contextlib
 import csv
+import hashlib
 import os
+import pickle
 import tempfile
 from typing import Any, Callable
 from dataclasses import dataclass, replace
@@ -27,6 +29,36 @@ def _silence_stderr():
         os.dup2(saved, 2)
         os.close(saved)
         os.close(devnull)
+
+
+# ---------------------------------------------------------------------------
+# Fingerprint cache
+# ---------------------------------------------------------------------------
+
+# Default directory (relative to where the CLI is executed) for caching the
+# computed fingerprints so they don't have to be recomputed on every restart.
+DEFAULT_CACHE_DIR = ".mol-search-service"
+
+# Bump this whenever the fingerprint computation logic or FINGERPRINTS config
+# changes in a way that invalidates previously cached fingerprints.
+CACHE_VERSION = 1
+
+
+def _file_content_hash(path: str) -> str:
+    """Stream a file through sha256 and return its hex digest."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _cache_path(cache_dir: str, compounds_file: str, fp_types: list[str]) -> str:
+    """Build the cache file path keyed on file content, fp types and cache version."""
+    content_hash = _file_content_hash(compounds_file)
+    key_src = f"{content_hash}|{CACHE_VERSION}|{','.join(sorted(fp_types))}"
+    key = hashlib.sha256(key_src.encode("utf-8")).hexdigest()
+    return os.path.join(cache_dir, f"{key}.pkl")
 
 
 # ---------------------------------------------------------------------------
@@ -327,37 +359,39 @@ def get_fingerprint(
             return func(mol, **opts)
 
 
-def safe_mol_from_smiles(smiles: str, cid: str = "unknown") -> Chem.Mol | None:
+def safe_mol_from_smiles(smiles: str) -> Chem.Mol | None:
     """
     Safely parses a SMILES string into an RDKit Mol object, avoiding strict
     sanitization bugs on organo-metalic compounds by carefully applying SanitizeFlags.
+
+    Returns None on any parse/sanitization failure. RDKit's noisy C++-level
+    warnings are suppressed; the caller decides how (and whether) to report the
+    failure, so it can be summarized rather than printed per compound.
     """
-    mol = Chem.MolFromSmiles(smiles, sanitize=False)
-    if mol is None:
-        return None
+    with _silence_stderr():
+        mol = Chem.MolFromSmiles(smiles, sanitize=False)
+        if mol is None:
+            return None
+        try:
+            Chem.SanitizeMol(
+                mol,
+                sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
+                ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES
+                ^ Chem.SanitizeFlags.SANITIZE_CLEANUP,
+            )
+        except Exception:
+            return None
 
-    try:
-        Chem.SanitizeMol(
-            mol,
-            sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
-            ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES
-            ^ Chem.SanitizeFlags.SANITIZE_CLEANUP,
-        )
-    except Exception as e:
-        print(f"{cid}\terror\t{str(e)}")
-        return None
-
-    # Perceive stereochemistry from the parsed structure. With sanitize=False,
-    # the SMILES directional bonds (/ and \) are stored but double-bond E/Z
-    # stereo is never assigned (SanitizeMol does not do this step), leaving such
-    # bonds as STEREONONE. Without this, use_chirality=True cannot distinguish
-    # E/Z geometry. Guarded separately so a stereo-perception failure does not
-    # discard an otherwise-valid molecule.
-    try:
-        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
-    except Exception:
-        pass
-
+        # Perceive stereochemistry from the parsed structure. With sanitize=False,
+        # the SMILES directional bonds (/ and \) are stored but double-bond E/Z
+        # stereo is never assigned (SanitizeMol does not do this step), leaving such
+        # bonds as STEREONONE. Without this, use_chirality=True cannot distinguish
+        # E/Z geometry. Guarded separately so a stereo-perception failure does not
+        # discard an otherwise-valid molecule.
+        try:
+            Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+        except Exception:
+            pass
     return mol
 
 
@@ -410,7 +444,7 @@ class MolSearchEngine:
 
         dataset = self.datasets[fp_type]
 
-        query_mol = safe_mol_from_smiles(query_smiles, cid="query")
+        query_mol = safe_mol_from_smiles(query_smiles)
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
@@ -465,7 +499,7 @@ class MolSearchEngine:
 
         dataset = self.datasets[fp_type]
 
-        query_mol = safe_mol_from_smiles(query_smiles, cid="query")
+        query_mol = safe_mol_from_smiles(query_smiles)
         if not query_mol:
             print(f"Error: Invalid query SMILES: {query_smiles}")
             return []
@@ -475,7 +509,7 @@ class MolSearchEngine:
         # Get candidate indices
         indices = self._get_indices(fp_type, db_names)
 
-        candidates_data: list[CompoundEntry] = []
+        candidates_data: list[tuple[CompoundEntry, Any]] = []
 
         # Screening
         # Optimization: We avoid creating intermediate lists of ALL compounds
@@ -492,7 +526,7 @@ class MolSearchEngine:
         for entry, fp in candidates_data:
             try:
                 # Optimized verification: Parsing SMILES is the slow part.
-                target_mol = safe_mol_from_smiles(entry.smiles, cid=entry.id)
+                target_mol = safe_mol_from_smiles(entry.smiles)
                 if target_mol is None:
                     continue
                 matches = target_mol.GetSubstructMatches(
@@ -516,7 +550,13 @@ class MolSearchEngine:
                 continue
         return results
 
-    def load_from_sparql(self, endpoint: str, query: str, fp_types: list[str] | None = None) -> None:
+    def load_from_sparql(
+        self,
+        endpoint: str,
+        query: str,
+        fp_types: list[str] | None = None,
+        cache_dir: str | None = DEFAULT_CACHE_DIR,
+    ) -> None:
         """
         Fetch compound data from a SPARQL endpoint, store it in a temp TSV file,
         and load it into the engine. The temp file path is stored in the
@@ -534,7 +574,7 @@ class MolSearchEngine:
                 stream=True
             ) as resp:
                 resp.raise_for_status()
-                
+
                 # Stream directly to temp TSV file
                 fd, temp_path = tempfile.mkstemp(suffix=".tsv")
                 with os.fdopen(fd, "wb") as f:
@@ -545,15 +585,24 @@ class MolSearchEngine:
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
-        self.load_file(temp_path, fp_types=fp_types)
+        self.load_file(temp_path, fp_types=fp_types, cache_dir=cache_dir)
 
-    def load_file(self, compounds_file: str, fp_types: list[str] | None = None) -> None:
+    def load_file(
+        self,
+        compounds_file: str,
+        fp_types: list[str] | None = None,
+        cache_dir: str | None = DEFAULT_CACHE_DIR,
+    ) -> None:
         """
         Load compounds from a TSV file.
         Format (by column order):
         1. chem IRI (e.g. <http://...>)
         2. SMILES string
         3. db name (optional)
+
+        If `cache_dir` is set, computed fingerprints are cached there (keyed on
+        file content + fingerprint types) and reused on subsequent loads instead
+        of being recomputed. Pass `cache_dir=None` to disable caching.
         """
         import re
 
@@ -564,7 +613,7 @@ class MolSearchEngine:
         # Persist the path so that additional Uvicorn workers can pick it up
         os.environ["COMPOUNDS_FILE"] = compounds_file
         print(f"Reading and parsing compounds from {compounds_file}...")
-        
+
         target_fps = fp_types if fp_types else list(FINGERPRINTS.keys())
         invalid_fps = [fp for fp in target_fps if fp not in FINGERPRINTS]
         if invalid_fps:
@@ -580,17 +629,43 @@ class MolSearchEngine:
             target_fps = list(target_fps) + ["pattern"]
 
         valid_fps = target_fps
+
+        # Try to load precomputed fingerprints from the on-disk cache
+        cache_file: str | None = None
+        if cache_dir:
+            try:
+                cache_file = _cache_path(cache_dir, compounds_file, valid_fps)
+            except OSError as e:
+                print(f"  - Warning: could not hash compounds file for caching: {e}")
+                cache_file = None
+
+            if cache_file and os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "rb") as cf:
+                        state = pickle.load(cf)
+                    self.core_data = state["core_data"]
+                    self.db_indices = state["db_indices"]
+                    self.datasets = state["datasets"]
+                    print(
+                        f"Loaded {len(self.core_data)} compounds with precomputed "
+                        f"fingerprints from cache: {cache_file}"
+                    )
+                    return
+                except Exception as e:
+                    print(f"  - Warning: failed to read fingerprint cache ({e}). Recomputing.")
+
         for fp_name in valid_fps:
             self.datasets[fp_name] = Dataset(fps=[])
-                
+
         self.core_data = []
         self.db_indices = {}
-        
+
         valid_count = 0
+        skipped_count = 0
 
         with open(compounds_file, "r", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter="\t")
-            
+
             # Peek at first row to detect header
             try:
                 first_row = next(reader)
@@ -602,10 +677,10 @@ class MolSearchEngine:
             if first_row and (first_row[0].startswith("?") or not iri_regex.match(first_row[0])):
                 is_header = True
                 print(f"  - Header detected and skipped: {first_row}")
-            
+
             # Process rows
             current_row = first_row if not is_header else None
-            
+
             while True:
                 if current_row:
                     row = current_row
@@ -634,24 +709,27 @@ class MolSearchEngine:
                     raise ValueError(
                         f"Invalid IRI format on row {reader.line_num}: '{cid_raw}'. IRIs must be wrapped in <> or start with http(s)://"
                     )
-                
+
                 cid = cid_raw.strip("<>")
                 entry = CompoundEntry(id=cid, smiles=smiles_raw, db_name=db_raw)
-                
-                # Defer SMILES validation to RDKit
-                mol = safe_mol_from_smiles(smiles_raw, cid=cid)
+
+                # Defer SMILES validation to RDKit. Compounds that fail to parse
+                # are skipped (and thus never enter the cache); we only count them
+                # here and report a single summary line at the end to avoid flooding
+                # the output with one warning per bad compound.
+                mol = safe_mol_from_smiles(smiles_raw)
                 if mol is None:
-                    print(f"  - Warning: RDKit failed to parse SMILES on row {reader.line_num} for '{cid_raw}': '{smiles_raw}'. Skipping.")
+                    skipped_count += 1
                     continue
 
                 # Append metadata
                 idx = len(self.core_data)
                 self.core_data.append(entry)
-                
+
                 if entry.db_name not in self.db_indices:
                     self.db_indices[entry.db_name] = []
                 self.db_indices[entry.db_name].append(idx)
-                
+
                 # Compute and append fingerprints immediately to avoid holding mol in memory
                 for fp_name in valid_fps:
                     try:
@@ -660,12 +738,34 @@ class MolSearchEngine:
                     except Exception as e:
                         print(f"  - Warning: Failed to compute {fp_name} for {cid}: {e}")
                         self.datasets[fp_name].fps.append(None)
-                
+
                 valid_count += 1
                 if valid_count % 100000 == 0:
                     print(f"  - Processed {valid_count} valid compounds...")
 
+        if skipped_count:
+            print(f"  - Skipped {skipped_count} compound(s) that RDKit could not parse.")
         print(f"Compilation complete. {valid_count} compounds loaded into the engine.")
+
+        # Persist computed fingerprints to the cache for faster future restarts
+        if cache_file and cache_dir:
+            try:
+                os.makedirs(cache_dir, exist_ok=True)
+                state = {
+                    "version": CACHE_VERSION,
+                    "fp_types": sorted(valid_fps),
+                    "core_data": self.core_data,
+                    "db_indices": self.db_indices,
+                    "datasets": self.datasets,
+                }
+                # Write to a temp file then atomically replace to avoid corrupt caches
+                tmp_path = f"{cache_file}.tmp"
+                with open(tmp_path, "wb") as cf:
+                    pickle.dump(state, cf, protocol=pickle.HIGHEST_PROTOCOL)
+                os.replace(tmp_path, cache_file)
+                print(f"Cached fingerprints to {cache_file}")
+            except Exception as e:
+                print(f"  - Warning: failed to write fingerprint cache: {e}")
 
 
 # Initialize Engine globally for easy sharing

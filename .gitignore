@@ -24,3 +24,6 @@ package-lock.json
 debug_mcp.py
 old_stuff/
 .claude
+
+# Fingerprint cache (default --cache-dir)
+.mol-search-service/

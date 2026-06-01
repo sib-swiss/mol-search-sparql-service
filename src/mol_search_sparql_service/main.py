@@ -4,11 +4,13 @@ import os
 import sys
 import socket
 
-from .rdkit_fingerprints import engine, FINGERPRINTS
+from .rdkit_fingerprints import engine, FINGERPRINTS, DEFAULT_CACHE_DIR
 from .sparql_service import app
 
 
-def _validate_fingerprint_types(fp_types: list[str] | None) -> None:
+def _validate_fingerprint_types(
+    parser: argparse.ArgumentParser, fp_types: list[str] | None
+) -> None:
     """Validate that all specified fingerprint types exist. Dies with error message if not."""
     if not fp_types:
         return
@@ -21,7 +23,7 @@ def _validate_fingerprint_types(fp_types: list[str] | None) -> None:
         )
 
 
-def _validate_port(port: int) -> None:
+def _validate_port(parser: argparse.ArgumentParser, port: int) -> None:
     """Validate port is in valid range and available. Dies with error message if not."""
     if not (1 <= port <= 65535):
         parser.error(f"Port must be between 1 and 65535, got {port}")
@@ -34,7 +36,6 @@ def _validate_port(port: int) -> None:
 
 
 def main() -> None:
-    global parser
     parser = argparse.ArgumentParser(description="Start the Chemistry SPARQL Service")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-f", "--file", help="Path to compounds.tsv")
@@ -70,6 +71,20 @@ def main() -> None:
         help="Comma-separated list of fingerprint types to compute (e.g. morgan_ecfp,pattern). If omitted, all types are computed.",
     )
     parser.add_argument(
+        "-c",
+        "--cache-dir",
+        type=str,
+        default=DEFAULT_CACHE_DIR,
+        help=f"Directory used to cache computed fingerprints so they are not "
+             f"recomputed on restart (default: {DEFAULT_CACHE_DIR}, relative to the "
+             f"current working directory).",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable fingerprint caching (always recompute on startup).",
+    )
+    parser.add_argument(
         "-u",
         "--public-url",
         type=str,
@@ -91,7 +106,7 @@ def main() -> None:
         parser.error(f"SPARQL query file not found: {args.sparql}")
 
     fp_types = args.fingerprints.split(",") if args.fingerprints else None
-    _validate_fingerprint_types(fp_types)
+    _validate_fingerprint_types(parser, fp_types)
 
     if args.fingerprints:
         os.environ["FINGERPRINTS_LIST"] = args.fingerprints
@@ -99,16 +114,24 @@ def main() -> None:
     public_url = args.public_url or f"http://localhost:{args.port}/sparql"
     os.environ["SPARQL_PUBLIC_URL"] = public_url
 
-    _validate_port(args.port)
+    # Resolve fingerprint cache directory (None disables caching). Persist it so
+    # additional Uvicorn workers reload from the same cache on startup.
+    cache_dir = None if args.no_cache else args.cache_dir
+    if cache_dir:
+        os.environ["CACHE_DIR"] = cache_dir
+    else:
+        os.environ["CACHE_DIR"] = ""
+
+    _validate_port(parser, args.port)
 
     # === DATA LOADING PHASE (errors still visible to user) ===
     # 1. Load Data
     if args.file:
-        engine.load_file(args.file, fp_types=fp_types)
+        engine.load_file(args.file, fp_types=fp_types, cache_dir=cache_dir)
     else:
         with open(args.sparql, "r") as f:
             query = f.read()
-        engine.load_from_sparql(args.endpoint, query, fp_types=fp_types)
+        engine.load_from_sparql(args.endpoint, query, fp_types=fp_types, cache_dir=cache_dir)
 
     # === DAEMONIZATION PHASE (only after all checks and preparations complete) ===
     # Daemonize if requested
