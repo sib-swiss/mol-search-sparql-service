@@ -160,27 +160,39 @@ def similarity_search(
 
 @g.type_function()
 def substructure_search(
-    smart: str,
+    smart: str | None = None,
+    smiles: str | None = None,
     limit: int = 100,
     db_names: str | None = None,
     min_match_count: int = 1,
     use_chirality: bool = False,
 ) -> list[SubstructureSearchResult]:
-    """Perform substructure search using a SMARTS/SMILES pattern.
+    """Perform substructure search using a SMARTS or SMILES query pattern.
+
+    Provide exactly one of ``func:smart`` or ``func:smiles``; the two are parsed
+    differently by RDKit:
+
+    - ``func:smart`` is parsed with ``MolFromSmarts`` as a query graph. It keeps
+      query features (wildcards, any-bond ``~``, recursive SMARTS, degree/charge
+      constraints) and matches literally — an aliphatic ``C`` will NOT match an
+      aromatic carbon, and aromaticity is not re-perceived.
+    - ``func:smiles`` is parsed with ``MolFromSmiles``: sanitized, aromatized and
+      with stereochemistry perceived, then used as a substructure query.
 
     Args:
-        smart: Query SMARTS or SMILES pattern to match.
+        smart: Query SMARTS pattern to match (mutually exclusive with smiles).
+        smiles: Query SMILES pattern to match (mutually exclusive with smart).
         limit: Maximum number of results to return (default: 100).
         db_names: Optional database name to limit the search.
         min_match_count: Minimum number of substructure matches required.
-        use_chirality: If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false.
+        use_chirality: If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false. Most meaningful for SMILES queries; SMARTS encodes its own stereo in the pattern.
 
-    Example:
+    Example (SMARTS):
         ```sparql
         PREFIX func: <urn:sparql-function:>
         SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
             [] a func:SubstructureSearch ;
-                func:smart "c1ccccc1" ;
+                func:smart "[#6]~[#7]" ;
                 func:result ?result ;
                 func:matchCount ?matchCount ;
                 func:matchedSmiles ?matchedSmiles ;
@@ -188,13 +200,12 @@ def substructure_search(
         }
         ```
 
-    Example with chirality:
+    Example (SMILES):
         ```sparql
         PREFIX func: <urn:sparql-function:>
         SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
             [] a func:SubstructureSearch ;
-                func:smart "[C@@H](N)(O)F" ;
-                func:useChirality true ;
+                func:smiles "c1ccccc1" ;
                 func:result ?result ;
                 func:matchCount ?matchCount ;
                 func:matchedSmiles ?matchedSmiles ;
@@ -203,13 +214,25 @@ def substructure_search(
         ```
     """
     try:
+        if smart and smiles:
+            print("Error: provide either func:smart or func:smiles, not both")
+            return []
+        if smart:
+            query, query_type = smart, "smarts"
+        elif smiles:
+            query, query_type = smiles, "smiles"
+        else:
+            print("Error: substructure_search requires func:smart or func:smiles")
+            return []
+
         db_list = [db_names] if db_names else None
         results = engine.search_substructure(
-            smart,
+            query,
             limit=limit,
             db_names=db_list,
             min_match_count=min_match_count,
             use_chirality=use_chirality,
+            query_type=query_type,
         )
         # Emit one row per distinct matched fragment so each match's SMILES and
         # SMARTS are individually bindable. Compounds with no renderable fragment

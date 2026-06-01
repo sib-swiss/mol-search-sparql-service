@@ -162,6 +162,21 @@ def test_substructure_search_returns_matched_fragments():
     assert "#" in b["matchedSmarts"]["value"]
 
 
+def test_substructure_search_by_smiles():
+    # The func:smiles property parses the query as SMILES (aromatized).
+    bindings = sparql_query("""
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchCount WHERE {
+            [] a func:SubstructureSearch ;
+                func:smiles "c1ccccc1" ;
+                func:result ?result ;
+                func:matchCount ?matchCount .
+        }
+    """)
+    assert len(bindings) > 0
+    assert int(bindings[0]["matchCount"]["value"]) >= 1
+
+
 def test_list_fingerprints():
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>

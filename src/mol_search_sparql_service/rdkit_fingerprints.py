@@ -400,6 +400,19 @@ def safe_mol_from_smiles(smiles: str) -> Chem.Mol | None:
     return mol
 
 
+def safe_mol_from_smarts(smarts: str) -> Chem.Mol | None:
+    """Parse a SMARTS pattern into an RDKit query Mol.
+
+    Unlike SMILES, a SMARTS is parsed as a query graph: it keeps query
+    features (wildcards, any-bond `~`, recursive SMARTS, degree/H/charge
+    constraints) and is NOT sanitized or re-aromatized. Matching therefore
+    follows the pattern literally — e.g. an aliphatic `C` will not match an
+    aromatic carbon. Returns None on a parse failure.
+    """
+    with _silence_stderr():
+        return Chem.MolFromSmarts(smarts)
+
+
 # ---------------------------------------------------------------------------
 # Search engine
 # ---------------------------------------------------------------------------
@@ -485,28 +498,44 @@ class MolSearchEngine:
 
     def search_substructure(
         self,
-        query_smiles: str,
+        query: str,
         limit: int = 5,
         db_names: list[str] | None = None,
         fp_type: str = "pattern",
         min_match_count: int = 1,
         use_chirality: bool = False,
+        query_type: str = "smiles",
     ) -> list[SubstructureResult]:
         """Executes a substructure search (Screening + Verification).
 
         Args:
+            query: The query pattern, interpreted according to ``query_type``.
+            query_type: ``"smiles"`` (default) parses ``query`` with
+                ``MolFromSmiles`` — sanitized, aromatized, stereo perceived.
+                ``"smarts"`` parses it with ``MolFromSmarts`` as a query graph,
+                keeping query features and matching literally (no
+                re-aromatization).
             use_chirality: If True, both tetrahedral (R/S) and double-bond (E/Z)
                 stereochemistry are taken into account during matching.
-                Defaults to False for maximum recall.
+                Defaults to False for maximum recall. Most meaningful for SMILES
+                queries; SMARTS encodes its own stereo constraints in the pattern.
         """
         if fp_type not in self.datasets:
             raise ValueError(f"Error: Dataset {fp_type} not loaded.")
 
+        if query_type not in ("smiles", "smarts"):
+            raise ValueError(
+                f"Error: query_type must be 'smiles' or 'smarts', got {query_type!r}."
+            )
+
         dataset = self.datasets[fp_type]
 
-        query_mol = safe_mol_from_smiles(query_smiles)
+        if query_type == "smarts":
+            query_mol = safe_mol_from_smarts(query)
+        else:
+            query_mol = safe_mol_from_smiles(query)
         if not query_mol:
-            print(f"Error: Invalid query SMILES: {query_smiles}")
+            print(f"Error: Invalid query {query_type.upper()}: {query}")
             return []
 
         query_fp = get_fingerprint(query_mol, fp_type)

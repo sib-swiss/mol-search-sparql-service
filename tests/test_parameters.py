@@ -301,3 +301,62 @@ def test_matched_fragments_deduplicated():
     finally:
         os.unlink(path)
 
+
+def test_query_type_smiles_vs_smarts():
+    """SMILES and SMARTS queries are parsed differently: a Kekulé string is
+    aromatized as SMILES but stays literal/aliphatic as SMARTS."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = (
+        "?chem\t?smiles\t?db\n"
+        "<http://ex.org/benzene>\tc1ccccc1\ttest\n"
+        "<http://ex.org/cyclohexane>\tC1CCCCC1\ttest\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    def ids(query, query_type):
+        return {
+            r.id for r in eng.search_substructure(query, query_type=query_type)
+        }
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        # Kekulé benzene: aromatized as SMILES -> matches; literal as SMARTS -> not.
+        assert ids("C1=CC=CC=C1", "smiles") == {"http://ex.org/benzene"}
+        assert ids("C1=CC=CC=C1", "smarts") == set()
+
+        # Aromatic SMARTS still matches the aromatic ring.
+        assert ids("c1ccccc1", "smarts") == {"http://ex.org/benzene"}
+
+        # SMARTS-only query feature (ring-membership) has no SMILES equivalent.
+        assert ids("[#6;R]", "smarts") == {
+            "http://ex.org/benzene",
+            "http://ex.org/cyclohexane",
+        }
+    finally:
+        os.unlink(path)
+
+
+def test_query_type_invalid_raises():
+    """An unknown query_type is rejected."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = "?chem\t?smiles\t?db\n<http://ex.org/x>\tCCO\ttest\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+        with pytest.raises(ValueError):
+            eng.search_substructure("CCO", query_type="inchi")
+    finally:
+        os.unlink(path)
+

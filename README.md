@@ -110,18 +110,35 @@ SELECT ?result ?score WHERE {
 }
 ```
 
-**Substructure Search** — Find all compounds containing a specific substructure (e.g., benzene ring). Each result also reports the matched fragment as SMILES and SMARTS, rendered from the target so its stereochemistry is preserved (one row per distinct match):
+**Substructure Search** — Find all compounds containing a specific substructure (e.g., benzene ring). Supply the query with **exactly one** of two properties, which RDKit parses differently:
+
+- `func:smiles` — parsed with `MolFromSmiles` (sanitized, aromatized, stereo perceived).
+- `func:smart` — parsed with `MolFromSmarts` as a query graph, matched literally (wildcards, any-bond `~`, recursive SMARTS; aliphatic `C` does not match aromatic carbon).
+
+Each result also reports the matched fragment as SMILES and SMARTS, rendered from the target so its stereochemistry is preserved (one row per distinct match):
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
 SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
-        func:smart "c1ccccc1" ;
+        func:smiles "c1ccccc1" ;
         func:limit 100 ;
         func:result ?result ;
         func:matchCount ?matchCount ;
         func:matchedSmiles ?matchedSmiles ;
         func:matchedSmarts ?matchedSmarts .
+}
+```
+
+Or query with a SMARTS pattern using query features, e.g. any carbon bonded to any nitrogen:
+
+```sparql
+PREFIX func: <urn:sparql-function:>
+SELECT ?result ?matchCount WHERE {
+    [] a func:SubstructureSearch ;
+        func:smart "[#6]~[#7]" ;
+        func:result ?result ;
+        func:matchCount ?matchCount .
 }
 ```
 
@@ -232,7 +249,17 @@ SELECT ?result ?score WHERE {
 
 ### `func:SubstructureSearch`
 
-Perform substructure search using a SMARTS/SMILES pattern.
+Perform substructure search using a SMARTS or SMILES query pattern.
+
+Provide exactly one of ``func:smart`` or ``func:smiles``; the two are parsed
+differently by RDKit:
+
+- ``func:smart`` is parsed with ``MolFromSmarts`` as a query graph. It keeps
+  query features (wildcards, any-bond ``~``, recursive SMARTS, degree/charge
+  constraints) and matches literally — an aliphatic ``C`` will NOT match an
+  aromatic carbon, and aromaticity is not re-perceived.
+- ``func:smiles`` is parsed with ``MolFromSmiles``: sanitized, aromatized and
+  with stereochemistry perceived, then used as a substructure query.
 
 **IRI:** `urn:sparql-function:SubstructureSearch`
 
@@ -240,11 +267,12 @@ Perform substructure search using a SMARTS/SMILES pattern.
 
 | Predicate | Type | Default | Description |
 |-----------------|------|---------|-------------|
-| `func:smart` | `str` | *required* | Query SMARTS or SMILES pattern to match. |
+| `func:smart` | `UnionType[str, NoneType]` | `None` | Query SMARTS pattern to match (mutually exclusive with smiles). |
+| `func:smiles` | `UnionType[str, NoneType]` | `None` | Query SMILES pattern to match (mutually exclusive with smart). |
 | `func:limit` | `int` | `100` | Maximum number of results to return (default: 100). |
 | `func:dbNames` | `UnionType[str, NoneType]` | `None` | Optional database name to limit the search. |
 | `func:minMatchCount` | `int` | `1` | Minimum number of substructure matches required. |
-| `func:useChirality` | `bool` | `False` | If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false. |
+| `func:useChirality` | `bool` | `False` | If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false. Most meaningful for SMILES queries; SMARTS encodes its own stereo in the pattern. |
 
 **Outputs:**
 
@@ -261,7 +289,7 @@ Perform substructure search using a SMARTS/SMILES pattern.
 PREFIX func: <urn:sparql-function:>
 SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
-        func:smart "c1ccccc1" ;
+        func:smart "[#6]~[#7]" ;
         func:result ?result ;
         func:matchCount ?matchCount ;
         func:matchedSmiles ?matchedSmiles ;
@@ -275,8 +303,7 @@ SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
 PREFIX func: <urn:sparql-function:>
 SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
     [] a func:SubstructureSearch ;
-        func:smart "[C@@H](N)(O)F" ;
-        func:useChirality true ;
+        func:smiles "c1ccccc1" ;
         func:result ?result ;
         func:matchCount ?matchCount ;
         func:matchedSmiles ?matchedSmiles ;
