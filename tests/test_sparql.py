@@ -140,6 +140,28 @@ def test_substructure_search_with_limit():
     assert int(bindings[0]["matchCount"]["value"]) >= 1
 
 
+def test_substructure_search_returns_matched_fragments():
+    # Benzene ring; each row should carry the matched fragment as SMILES + SMARTS.
+    bindings = sparql_query("""
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
+            [] a func:SubstructureSearch ;
+                func:smart "c1ccccc1" ;
+                func:limit 100 ;
+                func:result ?result ;
+                func:matchCount ?matchCount ;
+                func:matchedSmiles ?matchedSmiles ;
+                func:matchedSmarts ?matchedSmarts .
+        }
+    """)
+    assert len(bindings) > 0
+    b = bindings[0]
+    assert b["matchedSmiles"]["value"]
+    assert b["matchedSmarts"]["value"]
+    # SMARTS fragments use atomic-number queries.
+    assert "#" in b["matchedSmarts"]["value"]
+
+
 def test_list_fingerprints():
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>

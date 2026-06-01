@@ -19,6 +19,10 @@ class SubstructureSearchResult:
     """The URI of the matching compound."""
     matchCount: int
     """Number of matches found (1 if boolean match)."""
+    matchedSmiles: str
+    """SMILES of the matched fragment, rendered from the target (stereo preserved)."""
+    matchedSmarts: str
+    """SMARTS of the matched fragment, rendered from the target (stereo preserved)."""
 
 
 @dataclass
@@ -174,11 +178,13 @@ def substructure_search(
     Example:
         ```sparql
         PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?matchCount WHERE {
+        SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
             [] a func:SubstructureSearch ;
                 func:smart "c1ccccc1" ;
                 func:result ?result ;
-                func:matchCount ?matchCount .
+                func:matchCount ?matchCount ;
+                func:matchedSmiles ?matchedSmiles ;
+                func:matchedSmarts ?matchedSmarts .
         }
         ```
 
@@ -203,10 +209,22 @@ def substructure_search(
             min_match_count=min_match_count,
             use_chirality=use_chirality,
         )
-        return [
-            SubstructureSearchResult(result=URIRef(r.id), matchCount=int(r.match_count))
-            for r in results
-        ]
+        # Emit one row per distinct matched fragment so each match's SMILES and
+        # SMARTS are individually bindable. Compounds with no renderable fragment
+        # still surface once with empty fragment strings.
+        rows = []
+        for r in results:
+            fragments = list(zip(r.matched_smiles, r.matched_smarts)) or [("", "")]
+            for smi, sma in fragments:
+                rows.append(
+                    SubstructureSearchResult(
+                        result=URIRef(r.id),
+                        matchCount=int(r.match_count),
+                        matchedSmiles=smi,
+                        matchedSmarts=sma,
+                    )
+                )
+        return rows
     except Exception as e:
         print(f"Error in substructure_search: {e}")
         return []
