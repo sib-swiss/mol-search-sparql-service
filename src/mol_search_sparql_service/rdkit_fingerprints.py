@@ -420,7 +420,7 @@ def safe_mol_from_smarts(smarts: str) -> Chem.Mol | None:
 
 
 def highlight_match_svg(
-    mol: Chem.Mol, atoms: list[int], width: int = 450, height: int = 350
+    mol: Chem.Mol, atoms: list[int], width: int = 400, height: int = 400
 ) -> str:
     """Render ``mol`` to an SVG string with ``atoms`` AND the bonds among them
     highlighted — used to depict a matched substructure on the database molecule.
