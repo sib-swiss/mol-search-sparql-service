@@ -302,6 +302,36 @@ def test_matched_fragments_deduplicated():
         os.unlink(path)
 
 
+def test_matched_images_opt_in():
+    """SVG depictions are produced only when with_images=True, parallel to the
+    matched fragments and highlighting the match."""
+    import tempfile, os
+    from mol_search_sparql_service.rdkit_fingerprints import MolSearchEngine
+
+    tsv = "?chem\t?smiles\t?db\n<http://ex.org/toluene>\tCc1ccccc1\ttest\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
+        f.write(tsv)
+        path = f.name
+
+    try:
+        eng = MolSearchEngine()
+        eng.load_file(path)
+
+        # Default: no images rendered.
+        r = eng.search_substructure("c1ccccc1")[0]
+        assert r.matched_images == []
+
+        # Opt in: one SVG per matched fragment, each a valid highlighted SVG.
+        r = eng.search_substructure("c1ccccc1", with_images=True)[0]
+        assert len(r.matched_images) == len(r.matched_smiles) >= 1
+        svg = r.matched_images[0]
+        assert "<svg" in svg
+        # PrepareAndDrawMolecule emits highlight markers (ellipse / fill colour).
+        assert "ellipse" in svg or "fill:#" in svg
+    finally:
+        os.unlink(path)
+
+
 def test_query_type_smiles_vs_smarts():
     """SMILES and SMARTS queries are parsed differently: a Kekulé string is
     aromatized as SMILES but stays literal/aliphatic as SMARTS."""

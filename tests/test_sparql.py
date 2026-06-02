@@ -177,6 +177,23 @@ def test_substructure_search_by_smiles():
     assert int(bindings[0]["matchCount"]["value"]) >= 1
 
 
+def test_substructure_search_with_image():
+    # func:withImages true populates func:matchedImage with a highlighted SVG.
+    bindings = sparql_query("""
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?result ?matchedImage WHERE {
+            [] a func:SubstructureSearch ;
+                func:smiles "c1ccccc1" ;
+                func:limit 5 ;
+                func:withImages true ;
+                func:result ?result ;
+                func:matchedImage ?matchedImage .
+        }
+    """)
+    assert len(bindings) > 0
+    assert "<svg" in bindings[0]["matchedImage"]["value"]
+
+
 def test_list_fingerprints():
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>
