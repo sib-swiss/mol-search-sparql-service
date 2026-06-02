@@ -326,6 +326,9 @@ def test_matched_images_opt_in():
         assert len(r.matched_images) == len(r.matched_smiles) >= 1
         svg = r.matched_images[0]
         assert "<svg" in svg
+        # The XML declaration is stripped; the SVG starts at the root element.
+        assert not svg.startswith("<?xml")
+        assert svg.lstrip().startswith("<")
         # PrepareAndDrawMolecule emits highlight markers (ellipse / fill colour).
         assert "ellipse" in svg or "fill:#" in svg
     finally:

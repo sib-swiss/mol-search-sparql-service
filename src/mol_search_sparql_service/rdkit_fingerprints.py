@@ -440,7 +440,13 @@ def highlight_match_svg(
                 drawer, mol, highlightAtoms=list(atoms), highlightBonds=bonds
             )
         drawer.FinishDrawing()
-        return drawer.GetDrawingText()
+        svg = drawer.GetDrawingText()
+        # Strip the leading XML declaration (e.g.
+        # "<?xml version='1.0' encoding='iso-8859-1'?>\n") so the result is a
+        # bare <svg> element, easier to embed inline.
+        if svg.startswith("<?xml"):
+            svg = svg[svg.index("?>") + 2 :].lstrip("\n")
+        return svg
     except Exception:
         return ""
 
