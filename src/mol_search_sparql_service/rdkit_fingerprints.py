@@ -14,6 +14,7 @@ from rdkit.Chem import (
     MACCSkeys,
     PatternFingerprint,
 )
+from rdkit.Chem import rdDepictor
 from rdkit.Chem.Draw import rdMolDraw2D
 
 # NOTE: we need to silence RDKit warnings that magically poped up from nowhere
@@ -419,21 +420,31 @@ def safe_mol_from_smarts(smarts: str) -> Chem.Mol | None:
 
 
 def highlight_match_svg(
-    mol: Chem.Mol, atoms: list[int], width: int = 400, height: int = 300
+    mol: Chem.Mol, atoms: list[int], width: int = 450, height: int = 350
 ) -> str:
-    """Render ``mol`` to an SVG string with ``atoms`` (and the bonds among them)
+    """Render ``mol`` to an SVG string with ``atoms`` AND the bonds among them
     highlighted — used to depict a matched substructure on the database molecule.
 
-    Returns an empty string on any drawing failure so a single bad depiction
-    never aborts a search.
+    Generates fresh 2D coordinates with the CoordGen algorithm: the legacy
+    depiction can produce distorted/overlapping layouts on complex molecules
+    (rings that look "unclosed"), whereas CoordGen yields clean, properly closed
+    rings. Returns an empty string on any drawing failure so a single bad
+    depiction never aborts a search.
     """
     try:
         atom_set = set(atoms)
+        # Highlight every bond whose both endpoints are in the matched atom set.
         bonds = [
             b.GetIdx()
             for b in mol.GetBonds()
             if b.GetBeginAtomIdx() in atom_set and b.GetEndAtomIdx() in atom_set
         ]
+        # Lay the molecule out cleanly. Compute once per molecule (reused across
+        # this molecule's matches); CoordGen gives publication-quality 2D coords.
+        if mol.GetNumConformers() == 0:
+            with _silence_stderr():
+                rdDepictor.SetPreferCoordGen(True)
+                rdDepictor.Compute2DCoords(mol)
         drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
         with _silence_stderr():
             rdMolDraw2D.PrepareAndDrawMolecule(
