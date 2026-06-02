@@ -362,6 +362,12 @@ Auto-generate docs from functions docstrings and update the `README.md`:
 uv run src/mol_search_sparql_service/gen_docs.py
 ```
 
+Deploy with docker:
+
+```sh
+docker compose up -d
+```
+
 To release a new version run the release script providing the version bump: `fix`, `minor`, or `major`:
 
 ```sh

@@ -2,6 +2,7 @@ services:
   mol-search-sparql-service:
     build: .
     # image: ghcr.io/sib-swiss/mol-search-sparql-service:main
+    restart: unless-stopped
     ports:
       - "127.0.0.1:8010:8010"
     environment:
