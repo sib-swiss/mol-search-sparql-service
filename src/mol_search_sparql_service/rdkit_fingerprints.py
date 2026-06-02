@@ -4,6 +4,7 @@ import hashlib
 import os
 import pickle
 import tempfile
+import time
 from typing import Any, Callable
 from dataclasses import dataclass, field, replace
 from rdkit import Chem
@@ -53,6 +54,15 @@ def _file_content_hash(path: str) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _count_lines(path: str) -> int:
+    """Count newlines in a file by streaming it in binary chunks (cheap, no parsing)."""
+    count = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            count += chunk.count(b"\n")
+    return count
 
 
 def _cache_path(cache_dir: str, compounds_file: str, fp_types: list[str]) -> str:
@@ -338,6 +348,28 @@ FINGERPRINTS.update(_ordered_fps)
 # ---------------------------------------------------------------------------
 
 
+# Cache of RDKit fingerprint generator objects, keyed by fingerprint type name.
+# A generator's options are fixed per fp_type, so building it once and reusing it
+# for every molecule avoids recreating it on each call. This is the dominant cost
+# when fingerprinting tens of thousands of compounds across multiple fp types.
+# RDKit generators are stateless for GetFingerprint, so reuse is safe.
+_GENERATOR_CACHE: dict[str, Any] = {}
+
+def _get_generator(name: str, cfg: "FingerprintConfig") -> Any:
+    """Return a cached RDKit generator for ``name``, building it on first use."""
+    generator = _GENERATOR_CACHE.get(name)
+    if generator is None:
+        opts = cfg.default_options.copy()
+        # Handle FCFP (feature invariants)
+        if name.startswith("morgan_fcfp"):
+            opts["atomInvariantsGenerator"] = (
+                rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
+            )
+        generator = cfg.python_method(**opts)
+        _GENERATOR_CACHE[name] = generator
+    return generator
+
+
 def get_fingerprint(
     mol: Chem.Mol, name: str = "morgan_ecfp"
 ) -> Any:
@@ -350,24 +382,16 @@ def get_fingerprint(
         raise ValueError(f"Unknown fingerprint type: {name}")
 
     cfg = FINGERPRINTS[name]
-    opts = cfg.default_options.copy()
-
-    # Handle FCFP (feature invariants)
-    if name.startswith("morgan_fcfp"):
-        opts["atomInvariantsGenerator"] = (
-            rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
-        )
-
     func: Callable[..., Any] = cfg.python_method
 
     if func.__name__.endswith("Generator"):
-        generator = func(**opts)
-        return generator.GetFingerprint(mol)
+        # Reuse a cached generator instead of rebuilding it for every molecule.
+        return _get_generator(name, cfg).GetFingerprint(mol)
     else:
         # For others (including pattern), options are passed directly to the function along with mol
         # atom_pair and topological_torsion print C++-level deprecation spam on every call
         with _silence_stderr():
-            return func(mol, **opts)
+            return func(mol, **cfg.default_options)
 
 
 def safe_mol_from_smiles(smiles: str) -> Chem.Mol | None:
@@ -684,7 +708,9 @@ class MolSearchEngine:
         """
         import requests
 
-        print(f"Fetching data from {endpoint}...")
+        print(f"Fetching data from SPARQL endpoint {endpoint}...")
+        start = time.perf_counter()
+        bytes_received = 0
         try:
             with requests.post(
                 endpoint,
@@ -699,8 +725,18 @@ class MolSearchEngine:
                 with os.fdopen(fd, "wb") as f:
                     for chunk in resp.iter_content(chunk_size=8192):
                         f.write(chunk)
+                        bytes_received += len(chunk)
         except Exception as e:
             raise RuntimeError(f"Failed to fetch data from SPARQL endpoint: {e}") from e
+
+        elapsed = time.perf_counter() - start
+        # Count data rows (lines minus the SPARQL TSV header row) so the user
+        # sees how many compounds the query returned before fingerprinting starts.
+        row_count = max(0, _count_lines(temp_path) - 1)
+        print(
+            f"Retrieved {row_count} compound rows ({bytes_received / 1e6:.1f} MB) "
+            f"from SPARQL endpoint in {elapsed:.1f}s"
+        )
 
         # Signal workers to delete the temp file on shutdown
         os.environ["DELETE_COMPOUNDS_FILE"] = "1"
@@ -767,7 +803,8 @@ class MolSearchEngine:
                     self.datasets = state["datasets"]
                     print(
                         f"Loaded {len(self.core_data)} compounds with precomputed "
-                        f"fingerprints from cache: {cache_file}"
+                        f"fingerprints ({', '.join(sorted(self.datasets))}) "
+                        f"across {len(self.db_indices)} database(s) from cache: {cache_file}"
                     )
                     return
                 except Exception as e:
@@ -781,6 +818,16 @@ class MolSearchEngine:
 
         valid_count = 0
         skipped_count = 0
+
+        # Announce the workload up front: this loop (SMILES parsing + fingerprint
+        # generation per compound) is the slow part, so the user sees what is
+        # running before it starts rather than waiting in silence.
+        total_rows = _count_lines(compounds_file)
+        print(
+            f"Generating {len(valid_fps)} fingerprint type(s) ({', '.join(valid_fps)}) "
+            f"for ~{total_rows} compounds. This is the slow step..."
+        )
+        start = time.perf_counter()
 
         with open(compounds_file, "r", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter="\t")
@@ -859,12 +906,21 @@ class MolSearchEngine:
                         self.datasets[fp_name].fps.append(None)
 
                 valid_count += 1
-                if valid_count % 100000 == 0:
-                    print(f"  - Processed {valid_count} valid compounds...")
+                if valid_count % 10000 == 0:
+                    pct = f" ({100 * valid_count / total_rows:.0f}%)" if total_rows else ""
+                    rate = valid_count / max(time.perf_counter() - start, 1e-9)
+                    print(
+                        f"  - Fingerprinted {valid_count}/{total_rows}{pct} "
+                        f"compounds ({rate:.0f}/s)..."
+                    )
 
+        elapsed = time.perf_counter() - start
         if skipped_count:
             print(f"  - Skipped {skipped_count} compound(s) that RDKit could not parse.")
-        print(f"Compilation complete. {valid_count} compounds loaded into the engine.")
+        print(
+            f"Compilation complete. {valid_count} compounds loaded into the engine "
+            f"across {len(self.db_indices)} database(s) in {elapsed:.1f}s."
+        )
 
         # Persist computed fingerprints to the cache for faster future restarts
         if cache_file and cache_dir:
@@ -882,7 +938,10 @@ class MolSearchEngine:
                 with open(tmp_path, "wb") as cf:
                     pickle.dump(state, cf, protocol=pickle.HIGHEST_PROTOCOL)
                 os.replace(tmp_path, cache_file)
-                print(f"Cached fingerprints to {cache_file}")
+                print(
+                    f"Cached {len(self.core_data)} compounds' fingerprints "
+                    f"to {cache_file}"
+                )
             except Exception as e:
                 print(f"  - Warning: failed to write fingerprint cache: {e}")
 
