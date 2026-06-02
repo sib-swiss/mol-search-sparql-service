@@ -2,6 +2,12 @@ FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
 # https://docs.astral.sh/uv/guides/integration/docker
 
 WORKDIR /app
+
+# RDKit's drawing module (rdMolDraw2D) needs X11 shared libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxrender1 libxext6 libsm6 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY . /app/
 
 RUN uv sync --frozen

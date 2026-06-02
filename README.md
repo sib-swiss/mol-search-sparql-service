@@ -365,7 +365,7 @@ uv run src/mol_search_sparql_service/gen_docs.py
 Deploy with docker:
 
 ```sh
-docker compose up -d
+docker compose up -d --build
 ```
 
 To release a new version run the release script providing the version bump: `fix`, `minor`, or `major`:
