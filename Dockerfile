@@ -5,7 +5,7 @@ WORKDIR /app
 
 # RDKit's drawing module (rdMolDraw2D) needs X11 shared libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libxrender1 libxext6 libsm6 \
+    libxrender1 libxext6 libsm6 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /app/
