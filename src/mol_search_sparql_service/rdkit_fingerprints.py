@@ -521,6 +521,15 @@ class MolSearchEngine:
         """Return a list of all database names present in the engine."""
         return list(self.db_indices.keys())
 
+    def get_loaded_fingerprints(self) -> list[str]:
+        """Return the fingerprint type keys actually compiled in this instance.
+
+        These are the fingerprints available for search on this deployment (a
+        subset of the supported ``FINGERPRINTS`` registry, selected via the
+        ``-t/--fingerprints`` CLI option).
+        """
+        return list(self.datasets.keys())
+
     def search_similarity(
         self,
         query_smiles: str,

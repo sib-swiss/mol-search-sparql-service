@@ -45,6 +45,8 @@ class FingerprintInfo:
     """Explainability mechanism / how bits map to substructures."""
     shortName: str
     """Short display name for the fingerprint (e.g. ECFP, MACCS)."""
+    compiled: bool
+    """True if this fingerprint is actually compiled/loaded in this instance (i.e. usable for search), as opposed to merely supported by the code."""
 
 
 @dataclass
@@ -69,25 +71,33 @@ g.bind("func", FUNC)
 
 @g.type_function()
 def list_fingerprints() -> list[FingerprintInfo]:
-    """List available fingerprint types.
+    """List all *supported* fingerprint types and flag which are compiled here.
+
+    Returns every fingerprint the code supports (the static registry). A given
+    deployment only compiles the subset selected via the ``-t/--fingerprints``
+    CLI option, so use ``func:compiled`` to tell which ones are actually usable
+    for search on this instance. Filter with ``FILTER(?compiled)`` to list only
+    the active ones.
 
     Example:
         ```sparql
         PREFIX func: <urn:sparql-function:>
-        SELECT ?fpType ?description ?shortName WHERE {
+        SELECT ?fpType ?shortName ?compiled WHERE {
             [] a func:ListFingerprints ;
                 func:fpType ?fpType ;
-                func:description ?description ;
-                func:shortName ?shortName .
+                func:shortName ?shortName ;
+                func:compiled ?compiled .
         }
         ```
     """
+    loaded = set(engine.get_loaded_fingerprints())
     return [
         FingerprintInfo(
             fpType=key,
             description=val.description,
             mechanism=val.explainability.mechanism,
             shortName=val.short_name,
+            compiled=key in loaded,
         )
         for key, val in FINGERPRINTS.items()
     ]

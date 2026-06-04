@@ -151,6 +151,9 @@ By default, the service computes **all 9 fingerprint types** (including chiral v
 
 If you do not need all fingerprints, you can drastically reduce memory usage by explicitly passing the `--fingerprints` flag to specify only the ones you intend to search against.
 
+> [!NOTE]
+> **Supported vs. compiled fingerprints.** `func:ListFingerprints` lists every fingerprint type the code *supports*, but a given deployment only *compiles* the subset selected via `-t/--fingerprints` (plus `pattern`, always loaded for substructure search). To discover which are actually usable for similarity search on a running instance, read the `func:compiled` flag — only rows where it is `true` are searchable. (`func:ListDatabases` likewise reports only the databases actually loaded.)
+
 > [!WARNING]
 > **A Note on `atom_pair` and `topological_torsion`**: Previous versions of this service computed these fingerprints as exact, unhashed sparse vectors. For complex molecules, these sparse maps grew exponentially, causing memory usage to skyrocket. They are now forced into fixed-size 2048-bit dense vectors to cap memory and dramatically accelerate similarity speeds. While this is the industry standard for fast searching, minor bit-collisions may occur compared to exact sparse pairwise matching.
 
@@ -161,7 +164,13 @@ If you do not need all fingerprints, you can drastically reduce memory usage by 
 
 ### `func:ListFingerprints`
 
-List available fingerprint types.
+List all *supported* fingerprint types and flag which are compiled here.
+
+Returns every fingerprint the code supports (the static registry). A given
+deployment only compiles the subset selected via the ``-t/--fingerprints``
+CLI option, so use ``func:compiled`` to tell which ones are actually usable
+for search on this instance. Filter with ``FILTER(?compiled)`` to list only
+the active ones.
 
 **IRI:** `urn:sparql-function:ListFingerprints`
 
@@ -173,19 +182,19 @@ List available fingerprint types.
 | `func:description` | `str` | Human readable description of the fingerprint. |
 | `func:mechanism` | `str` | Explainability mechanism / how bits map to substructures. |
 | `func:shortName` | `str` | Short display name for the fingerprint (e.g. ECFP, MACCS). |
+| `func:compiled` | `bool` | True if this fingerprint is actually compiled/loaded in this instance (i.e. usable for search), as opposed to merely supported by the code. |
 
 **Example:**
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
-SELECT ?fpType ?description ?shortName WHERE {
+SELECT ?fpType ?shortName ?compiled WHERE {
     [] a func:ListFingerprints ;
         func:fpType ?fpType ;
-        func:description ?description ;
-        func:shortName ?shortName .
+        func:shortName ?shortName ;
+        func:compiled ?compiled .
 }
 ```
-
 
 ### `func:ListDatabases`
 
@@ -208,7 +217,6 @@ SELECT ?dbName WHERE {
         func:dbName ?dbName .
 }
 ```
-
 
 ### `func:SimilaritySearch`
 
@@ -245,7 +253,6 @@ SELECT ?result ?score WHERE {
         func:score ?score .
 }
 ```
-
 
 ### `func:SubstructureSearch`
 
