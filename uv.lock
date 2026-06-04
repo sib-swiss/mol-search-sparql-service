@@ -3,8 +3,11 @@ revision = 3
 requires-python = ">=3.13"
 
 [options]
-exclude-newer = "2026-05-30T07:34:05.640776Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P1D"
+
+[options.exclude-newer-package]
+rdflib-endpoint = "2026-06-05T22:00:00Z"
 
 [[package]]
 name = "annotated-doc"
@@ -437,7 +440,7 @@ dev = [
 requires-dist = [
     { name = "mcp", specifier = ">=1.26.0" },
     { name = "rdflib", specifier = ">=7.6.0" },
-    { name = "rdflib-endpoint", specifier = ">=0.6.1" },
+    { name = "rdflib-endpoint", specifier = ">=0.6.2" },
     { name = "rdkit", specifier = "==2025.9.4" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "uvicorn", specifier = ">=0.41.0" },
@@ -773,15 +776,15 @@ wheels = [
 
 [[package]]
 name = "rdflib-endpoint"
-version = "0.6.1"
+version = "0.6.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
     { name = "rdflib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/ca/8a77260061752021cb4508234e51f86c0dbb26cb2ffc7696875bb21c7684/rdflib_endpoint-0.6.1.tar.gz", hash = "sha256:4a5366196b9f955638e37ccc3bbdb2106162e5ac8fa4f0cefac1766f7dbd87e2", size = 249529, upload-time = "2026-02-24T13:40:10.504Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/94/c2bb3181915361839b236ffc1406b10600344665ef9bc728af43fa45e84a/rdflib_endpoint-0.6.2.tar.gz", hash = "sha256:d8eb7085963f3db9f06887906171e64558b93a3443d2e23596448d9febae195a", size = 246329, upload-time = "2026-06-04T10:27:23.99Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/5f/5c2ba716cfa6fb098ef275f8c573b9f9282bb74dec0e15964ca2e1283a8e/rdflib_endpoint-0.6.1-py3-none-any.whl", hash = "sha256:940a8cc5b6401ff5be9fb2173e6015360253da781e2a1163bd97859617e6f6d3", size = 30821, upload-time = "2026-02-24T13:40:08.759Z" },
+    { url = "https://files.pythonhosted.org/packages/31/c0/af3e3873aa5017ce3f891e07eed0b0953dbd62b770b44d551fd266e10a14/rdflib_endpoint-0.6.2-py3-none-any.whl", hash = "sha256:2f17f1f0e6533570ba6e7880aae29dc08c69aaa36c2f6668e96ca232366b27a3", size = 31123, upload-time = "2026-06-04T10:27:22.472Z" },
 ]
 
 [[package]]

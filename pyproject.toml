@@ -22,7 +22,7 @@ keywords = [
 dependencies = [
     "mcp>=1.26.0",
     "rdflib>=7.6.0",
-    "rdflib-endpoint>=0.6.1",
+    "rdflib-endpoint>=0.6.2",
     "rdkit==2025.9.4",
     "requests>=2.32.5",
     "uvicorn>=0.41.0",
@@ -60,3 +60,6 @@ addopts = [
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+
+[tool.uv]
+exclude-newer-package = { "rdflib-endpoint" = "2026-06-05" }

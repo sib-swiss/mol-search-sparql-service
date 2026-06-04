@@ -156,8 +156,8 @@ def main() -> None:
     print(
         f"Starting SPARQL endpoint on port {args.port} with {args.workers} worker(s)..."
     )
-    import rdflib.plugins.sparql
 
+    import rdflib.plugins.sparql
     print(
         f"DEBUG: CUSTOM_EVALS keys: {list(rdflib.plugins.sparql.CUSTOM_EVALS.keys())}"
     )
@@ -169,9 +169,10 @@ def main() -> None:
             host="0.0.0.0",
             port=args.port,
             workers=args.workers,
+            proxy_headers=True,
         )
     else:
-        uvicorn.run(app, host="0.0.0.0", port=args.port)
+        uvicorn.run(app, host="0.0.0.0", port=args.port, proxy_headers=True)
 
 
 if __name__ == "__main__":
