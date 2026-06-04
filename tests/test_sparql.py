@@ -72,6 +72,57 @@ def sparql_query(query: str) -> Any:
     return response.json()["results"]["bindings"]
 
 
+# A second server started with only a subset of fingerprint types, to verify
+# that func:ListFingerprints reports the compiled subset (not the full registry).
+SUBSET_PORT = 8012
+SUBSET_URL = f"http://localhost:{SUBSET_PORT}/sparql"
+SUBSET_FPS = ["morgan_ecfp", "morgan_ecfp_chiral"]
+
+
+def _run_subset_server():
+    # Mirrors a deployment started with `-t morgan_ecfp,morgan_ecfp_chiral`.
+    engine.load_file("compounds.tsv", fp_types=list(SUBSET_FPS))
+    uvicorn.run(app, host="0.0.0.0", port=SUBSET_PORT, log_level="warning")
+
+
+@pytest.fixture(scope="module")
+def subset_server():
+    if is_port_in_use(SUBSET_PORT):
+        yield
+        return
+    proc = Process(target=_run_subset_server, daemon=True)
+    proc.start()
+    start = time.time()
+    while time.time() - start < 20:
+        if not proc.is_alive():
+            raise RuntimeError("Subset server crashed during startup.")
+        try:
+            requests.get(
+                f"http://localhost:{SUBSET_PORT}/sparql?query=SELECT * WHERE {{}} LIMIT 1",
+                timeout=1,
+            )
+            break
+        except requests.exceptions.RequestException:
+            time.sleep(1)
+    else:
+        proc.kill()
+        proc.join()
+        raise RuntimeError("Subset server failed to start in time.")
+    yield
+    proc.kill()
+    proc.join()
+
+
+def subset_query(query: str) -> Any:
+    response = requests.get(
+        SUBSET_URL,
+        params={"query": query},
+        headers={"Accept": "application/sparql-results+json"},
+    )
+    response.raise_for_status()
+    return response.json()["results"]["bindings"]
+
+
 # --- TESTS ---
 
 
@@ -197,11 +248,12 @@ def test_substructure_search_with_image():
 def test_list_fingerprints():
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>
-        SELECT ?fpType ?description ?shortName WHERE {
+        SELECT ?fpType ?description ?shortName ?compiled WHERE {
             [] a func:ListFingerprints ;
                 func:fpType ?fpType ;
                 func:description ?description ;
-                func:shortName ?shortName .
+                func:shortName ?shortName ;
+                func:compiled ?compiled .
         }
         """)
     assert len(bindings) > 0
@@ -209,3 +261,30 @@ def test_list_fingerprints():
     fp_types = [b["fpType"]["value"] for b in bindings]
     assert "morgan_ecfp" in fp_types
     assert "maccs" in fp_types
+    # The default test server loads ALL fingerprints, so every supported type
+    # is reported compiled.
+    assert all(b["compiled"]["value"] == "true" for b in bindings)
+
+
+def test_list_fingerprints_compiled_reflects_subset(subset_server):
+    """On a server started with a -t subset, only that subset (plus the
+    always-on `pattern`) is reported compiled; the rest are supported but not."""
+    bindings = subset_query("""
+        PREFIX func: <urn:sparql-function:>
+        SELECT ?fpType ?compiled WHERE {
+            [] a func:ListFingerprints ;
+                func:fpType ?fpType ;
+                func:compiled ?compiled .
+        }
+        """)
+    all_types = {b["fpType"]["value"] for b in bindings}
+    compiled = {
+        b["fpType"]["value"] for b in bindings if b["compiled"]["value"] == "true"
+    }
+
+    # The full supported registry is still listed.
+    assert {"morgan_ecfp", "morgan_ecfp_chiral", "maccs", "pattern"} <= all_types
+    # Only the requested subset + the always-on pattern are compiled.
+    assert compiled == {"morgan_ecfp", "morgan_ecfp_chiral", "pattern"}
+    # A supported-but-not-requested type is reported as not compiled.
+    assert "maccs" not in compiled
