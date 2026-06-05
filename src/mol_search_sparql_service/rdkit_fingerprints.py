@@ -554,14 +554,20 @@ class MolSearchEngine:
         # Get candidate indices
         indices = self._get_indices(fp_type, db_names)
 
-        # Retrieve FPs for the target indices
-        if not db_names:
-            target_fps: list[Any] = dataset.fps
-            target_data: list[CompoundEntry] = self.core_data
-        else:
-            # Construct subset list
-            target_fps = [dataset.fps[i] for i in indices]
-            target_data = [self.core_data[i] for i in indices]
+        # Retrieve FPs for the target indices, dropping any compound whose
+        # fingerprint failed to compute (stored as None). Passing a None into
+        # DataStructs.BulkTanimotoSimilarity dereferences a null pointer in
+        # RDKit's C++ layer and SEGFAULTS the whole process (uncatchable here).
+        # The two lists are kept strictly parallel so sims[i] maps to
+        # target_data[i].
+        target_fps: list[Any] = []
+        target_data: list[CompoundEntry] = []
+        for i in indices:
+            fp = dataset.fps[i]
+            if fp is None:
+                continue
+            target_fps.append(fp)
+            target_data.append(self.core_data[i])
 
         if not target_fps:
             return []
