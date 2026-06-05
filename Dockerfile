@@ -21,5 +21,6 @@ ENV SPARQL_FILE='/app/fetch_rhea.rq'
 ENV SPARQL_ENDPOINT='https://sparql.rhea-db.org/sparql'
 
 EXPOSE 8010
-ENTRYPOINT ["sh", "-c", "uv run mol-search-sparql-service  -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql -p $SERVER_PORT -w $WORKERS"]
+ENTRYPOINT ["sh", "-c", "uv run mol-search-sparql-service -f compounds.tsv -p $SERVER_PORT -w $WORKERS"]
+# ENTRYPOINT ["sh", "-c", "uv run mol-search-sparql-service  -s fetch_rhea.rq -e https://sparql.rhea-db.org/sparql -p $SERVER_PORT -w $WORKERS"]
 # ENTRYPOINT ["sh", "-c", "uv run mol-search-sparql-service -s $SPARQL_FILE -e $SPARQL_ENDPOINT -p $SERVER_PORT -w $WORKERS"]
