@@ -23,8 +23,8 @@ class SubstructureSearchResult:
     """SMILES of the matched fragment, rendered from the target (stereo preserved)."""
     matchedSmarts: str
     """SMARTS of the matched fragment, rendered from the target (stereo preserved)."""
-    matchedImage: str
-    """SVG depiction of the database molecule with the matched substructure highlighted (empty unless func:withImages is true)."""
+    completeSmiles: str
+    """The original, complete SMILES string of the matching compound as stored in the service."""
 
 
 @dataclass
@@ -178,7 +178,6 @@ def substructure_search(
     db_names: str | None = None,
     min_match_count: int = 1,
     use_chirality: bool = False,
-    with_images: bool = False,
 ) -> list[SubstructureSearchResult]:
     """Perform substructure search using a SMARTS or SMILES query pattern.
 
@@ -199,7 +198,6 @@ def substructure_search(
         db_names: Optional database name to limit the search.
         min_match_count: Minimum number of substructure matches required.
         use_chirality: If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false. Most meaningful for SMILES queries; SMARTS encodes its own stereo in the pattern.
-        with_images: If true, populate func:matchedImage with an SVG of the database molecule, matched substructure highlighted. Defaults to false (rendering is comparatively expensive).
 
     Example (SMARTS):
         ```sparql
@@ -214,28 +212,16 @@ def substructure_search(
         }
         ```
 
-    Example (SMILES):
+    Example (SMILES, with the complete molecule SMILES):
         ```sparql
         PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
+        SELECT ?result ?matchCount ?matchedSmiles ?completeSmiles WHERE {
             [] a func:SubstructureSearch ;
                 func:smiles "c1ccccc1" ;
                 func:result ?result ;
                 func:matchCount ?matchCount ;
                 func:matchedSmiles ?matchedSmiles ;
-                func:matchedSmarts ?matchedSmarts .
-        }
-        ```
-
-    Example (with highlighted SVG image):
-        ```sparql
-        PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?matchedImage WHERE {
-            [] a func:SubstructureSearch ;
-                func:smiles "c1ccccc1" ;
-                func:withImages true ;
-                func:result ?result ;
-                func:matchedImage ?matchedImage .
+                func:completeSmiles ?completeSmiles .
         }
         ```
     """
@@ -259,27 +245,22 @@ def substructure_search(
             min_match_count=min_match_count,
             use_chirality=use_chirality,
             query_type=query_type,
-            with_images=with_images,
         )
-        # Emit one row per distinct matched fragment so each match's SMILES,
-        # SMARTS and image are individually bindable. Compounds with no
-        # renderable fragment still surface once with empty fragment strings.
+        # Emit one row per distinct matched fragment so each match's SMILES and
+        # SMARTS are individually bindable. completeSmiles is the full original
+        # molecule SMILES, repeated on every row for that compound. Compounds
+        # with no renderable fragment still surface once with empty fragments.
         rows = []
         for r in results:
-            # matched_images is parallel to the fragment lists when with_images
-            # was requested, and empty otherwise.
-            images = r.matched_images or [""] * len(r.matched_smiles)
-            fragments = list(zip(r.matched_smiles, r.matched_smarts, images)) or [
-                ("", "", "")
-            ]
-            for smi, sma, img in fragments:
+            fragments = list(zip(r.matched_smiles, r.matched_smarts)) or [("", "")]
+            for smi, sma in fragments:
                 rows.append(
                     SubstructureSearchResult(
                         result=URIRef(r.id),
                         matchCount=int(r.match_count),
                         matchedSmiles=smi,
                         matchedSmarts=sma,
-                        matchedImage=img,
+                        completeSmiles=r.smiles,
                     )
                 )
         return rows

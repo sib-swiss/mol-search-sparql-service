@@ -228,21 +228,23 @@ def test_substructure_search_by_smiles():
     assert int(bindings[0]["matchCount"]["value"]) >= 1
 
 
-def test_substructure_search_with_image():
-    # func:withImages true populates func:matchedImage with a highlighted SVG.
+def test_substructure_search_complete_smiles():
+    # func:completeSmiles returns the full original SMILES of the matching
+    # compound (a superset of, and generally different from, the matched fragment).
     bindings = sparql_query("""
         PREFIX func: <urn:sparql-function:>
-        SELECT ?result ?matchedImage WHERE {
+        SELECT ?result ?matchedSmiles ?completeSmiles WHERE {
             [] a func:SubstructureSearch ;
                 func:smiles "c1ccccc1" ;
                 func:limit 5 ;
-                func:withImages true ;
                 func:result ?result ;
-                func:matchedImage ?matchedImage .
+                func:matchedSmiles ?matchedSmiles ;
+                func:completeSmiles ?completeSmiles .
         }
     """)
     assert len(bindings) > 0
-    assert "<svg" in bindings[0]["matchedImage"]["value"]
+    # Every row carries a non-empty complete SMILES string.
+    assert all(b["completeSmiles"]["value"] for b in bindings)
 
 
 def test_list_fingerprints():

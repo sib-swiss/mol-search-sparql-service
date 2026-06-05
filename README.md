@@ -280,7 +280,6 @@ differently by RDKit:
 | `func:dbNames` | `UnionType[str, NoneType]` | `None` | Optional database name to limit the search. |
 | `func:minMatchCount` | `int` | `1` | Minimum number of substructure matches required. |
 | `func:useChirality` | `bool` | `False` | If true, both tetrahedral (R/S) and double-bond (E/Z) stereochemistry are enforced during matching. Defaults to false. Most meaningful for SMILES queries; SMARTS encodes its own stereo in the pattern. |
-| `func:withImages` | `bool` | `False` | If true, populate func:matchedImage with an SVG of the database molecule, matched substructure highlighted. Defaults to false (rendering is comparatively expensive). |
 
 **Outputs:**
 
@@ -290,7 +289,7 @@ differently by RDKit:
 | `func:matchCount` | `int` | Number of matches found (1 if boolean match). |
 | `func:matchedSmiles` | `str` | SMILES of the matched fragment, rendered from the target (stereo preserved). |
 | `func:matchedSmarts` | `str` | SMARTS of the matched fragment, rendered from the target (stereo preserved). |
-| `func:matchedImage` | `str` | SVG depiction of the database molecule with the matched substructure highlighted (empty unless func:withImages is true). |
+| `func:completeSmiles` | `str` | The original, complete SMILES string of the matching compound as stored in the service. |
 
 **Example 1:**
 
@@ -310,26 +309,13 @@ SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
 
 ```sparql
 PREFIX func: <urn:sparql-function:>
-SELECT ?result ?matchCount ?matchedSmiles ?matchedSmarts WHERE {
+SELECT ?result ?matchCount ?matchedSmiles ?completeSmiles WHERE {
     [] a func:SubstructureSearch ;
         func:smiles "c1ccccc1" ;
         func:result ?result ;
         func:matchCount ?matchCount ;
         func:matchedSmiles ?matchedSmiles ;
-        func:matchedSmarts ?matchedSmarts .
-}
-```
-
-**Example 3:**
-
-```sparql
-PREFIX func: <urn:sparql-function:>
-SELECT ?result ?matchedImage WHERE {
-    [] a func:SubstructureSearch ;
-        func:smiles "c1ccccc1" ;
-        func:withImages true ;
-        func:result ?result ;
-        func:matchedImage ?matchedImage .
+        func:completeSmiles ?completeSmiles .
 }
 ```
 

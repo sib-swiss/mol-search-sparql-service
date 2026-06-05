@@ -15,8 +15,6 @@ from rdkit.Chem import (
     MACCSkeys,
     PatternFingerprint,
 )
-from rdkit.Chem import rdDepictor
-from rdkit.Chem.Draw import rdMolDraw2D
 
 # NOTE: we need to silence RDKit warnings that magically poped up from nowhere
 # even if it was working before, and no libs version have been changed
@@ -138,10 +136,6 @@ class SubstructureResult:
     # rendered from the target molecule so its stereochemistry is preserved.
     matched_smiles: list[str] = field(default_factory=list)
     matched_smarts: list[str] = field(default_factory=list)
-    # Parallel SVG depiction per match, with the matched atoms/bonds highlighted.
-    # Only populated when the search is run with with_images=True (rendering is
-    # comparatively expensive); otherwise left empty.
-    matched_images: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -443,49 +437,6 @@ def safe_mol_from_smarts(smarts: str) -> Chem.Mol | None:
         return Chem.MolFromSmarts(smarts)
 
 
-def highlight_match_svg(
-    mol: Chem.Mol, atoms: list[int], width: int = 400, height: int = 400
-) -> str:
-    """Render ``mol`` to an SVG string with ``atoms`` AND the bonds among them
-    highlighted — used to depict a matched substructure on the database molecule.
-
-    Generates fresh 2D coordinates with the CoordGen algorithm: the legacy
-    depiction can produce distorted/overlapping layouts on complex molecules
-    (rings that look "unclosed"), whereas CoordGen yields clean, properly closed
-    rings. Returns an empty string on any drawing failure so a single bad
-    depiction never aborts a search.
-    """
-    try:
-        atom_set = set(atoms)
-        # Highlight every bond whose both endpoints are in the matched atom set.
-        bonds = [
-            b.GetIdx()
-            for b in mol.GetBonds()
-            if b.GetBeginAtomIdx() in atom_set and b.GetEndAtomIdx() in atom_set
-        ]
-        # Lay the molecule out cleanly. Compute once per molecule (reused across
-        # this molecule's matches); CoordGen gives publication-quality 2D coords.
-        if mol.GetNumConformers() == 0:
-            with _silence_stderr():
-                rdDepictor.SetPreferCoordGen(True)
-                rdDepictor.Compute2DCoords(mol)
-        drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
-        with _silence_stderr():
-            rdMolDraw2D.PrepareAndDrawMolecule(
-                drawer, mol, highlightAtoms=list(atoms), highlightBonds=bonds
-            )
-        drawer.FinishDrawing()
-        svg = drawer.GetDrawingText()
-        # Strip the leading XML declaration (e.g.
-        # "<?xml version='1.0' encoding='iso-8859-1'?>\n") so the result is a
-        # bare <svg> element, easier to embed inline.
-        if svg.startswith("<?xml"):
-            svg = svg[svg.index("?>") + 2 :].lstrip("\n")
-        return svg
-    except Exception:
-        return ""
-
-
 # ---------------------------------------------------------------------------
 # Search engine
 # ---------------------------------------------------------------------------
@@ -593,15 +544,10 @@ class MolSearchEngine:
         min_match_count: int = 1,
         use_chirality: bool = False,
         query_type: str = "smiles",
-        with_images: bool = False,
     ) -> list[SubstructureResult]:
         """Executes a substructure search (Screening + Verification).
 
         Args:
-            with_images: If True, render an SVG depiction of each matched
-                fragment (highlighted on the database molecule) into
-                ``matched_images``. Off by default as rendering is comparatively
-                expensive.
             query: The query pattern, interpreted according to ``query_type``.
             query_type: ``"smiles"`` (default) parses ``query`` with
                 ``MolFromSmiles`` — sanitized, aromatized, stereo perceived.
@@ -668,7 +614,6 @@ class MolSearchEngine:
                     seen: set[tuple[str, str]] = set()
                     matched_smiles: list[str] = []
                     matched_smarts: list[str] = []
-                    matched_images: list[str] = []
                     for atom_ids in matches:
                         atoms = list(atom_ids)
                         try:
@@ -684,10 +629,6 @@ class MolSearchEngine:
                         seen.add(key)
                         matched_smiles.append(smi)
                         matched_smarts.append(sma)
-                        if with_images:
-                            matched_images.append(
-                                highlight_match_svg(target_mol, atoms)
-                            )
 
                     results.append(
                         SubstructureResult(
@@ -698,7 +639,6 @@ class MolSearchEngine:
                             match_count=len(matches),
                             matched_smiles=matched_smiles,
                             matched_smarts=matched_smarts,
-                            matched_images=matched_images,
                         )
                     )
 
