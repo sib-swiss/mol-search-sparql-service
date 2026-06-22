@@ -1,3 +1,13 @@
+---
+title: Chemistry Search SPARQL Service
+emoji: 🫆
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 8010
+pinned: false
+---
+
 # 🫆 Chemistry Search SPARQL Service
 
 A service for finding similar chemicals and substructures using molecular fingerprints. It provides both a SPARQL endpoint and an MCP (Model Context Protocol) server interface.
