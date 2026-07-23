@@ -385,3 +385,11 @@ npm i
 npm run dev
 npm run build
 ```
+
+Push changes to [HuggingFace Spaces](https://vemonet-mol-search-sparql-service.hf.space/sparql):
+
+```sh
+git remote add space https://huggingface.co/spaces/vemonet/mol-search-sparql-service
+git push --force https://$HF_USER:$HF_TOKEN@huggingface.co/spaces/vemonet/mol-search-sparql-service main
+```
+
